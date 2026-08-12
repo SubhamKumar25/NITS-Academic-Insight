@@ -18,9 +18,10 @@ const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
 const app = express();
 const port = 3000;
 
-// Configure temporary Multer storage
+// Configure temporary Multer storage (use /tmp on Vercel as root is read-only)
+const uploadDir = (process.env.VERCEL || process.env.NODE_ENV === 'production') ? '/tmp' : 'uploads';
 const upload = multer({
-    dest: 'uploads/',
+    dest: uploadDir + '/',
     limits: { fileSize: 10 * 1024 * 1024 } // 10 MB limit
 });
 
@@ -386,12 +387,16 @@ function parseAcademicText(rawText) {
     };
 }
 
-// Ensure temp uploads folder exists
-if (!fs.existsSync('uploads')) {
+// Ensure temp uploads folder exists locally
+if (uploadDir === 'uploads' && !fs.existsSync('uploads')) {
     fs.mkdirSync('uploads');
 }
 
 // Start Server
-app.listen(port, () => {
-    console.log(`NITS Academic Insight backend running at http://localhost:${port}`);
-});
+if (require.main === module) {
+    app.listen(port, () => {
+        console.log(`NITS Academic Insight backend running at http://localhost:${port}`);
+    });
+}
+
+module.exports = app;
