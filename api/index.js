@@ -26,7 +26,7 @@ const upload = multer({
 });
 
 // Serve frontend static files
-app.use(express.static(__dirname));
+app.use(express.static(path.join(__dirname, '..')));
 app.use(express.json());
 
 // Main Document Analysis Endpoint
