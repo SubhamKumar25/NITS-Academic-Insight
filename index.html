@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NITS Academic Insight</title>
+    <meta name="description" content="NITS Academic Insight — Calculate and analyze SGPA, CGPA, percentage and academic performance for NIT Silchar M.Tech students.">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="site-header">
+        <div class="container header-inner">
+            <div class="brand">
+                <img src="assets/logo-small.png" alt="NIT Silchar" class="brand-logo">
+                <div class="brand-text">
+                    <span class="brand-name"><span class="brand-accent">NITS</span> Academic Insight</span>
+                    <span class="brand-badge">M.Tech Academic Utility</span>
+                </div>
+            </div>
+            <nav class="site-nav">
+                <a href="#calculator" class="nav-link active" id="nav-calc-btn">Calculator</a>
+                <a href="#analyzer" class="nav-link" id="nav-analyzer-btn">Result Analyzer</a>
+                <a href="#analysis" class="nav-link" id="nav-analysis-btn">Analysis</a>
+                <a href="#grade-rules" class="nav-link" id="nav-rules-btn">Grade Rules</a>
+            </nav>
+            <div class="header-actions">
+                <button type="button" class="btn btn-outline-danger btn-sm" id="reset-btn">Reset</button>
+                <button type="button" class="hamburger" id="hamburger-menu-btn" aria-label="Toggle Navigation Menu"><span></span><span></span><span></span></button>
+            </div>
+        </div>
+    </header>
+
+    <div class="mobile-menu" id="mobile-drawer-menu">
+        <a href="#calculator" class="nav-link" id="mob-calc-btn">Calculator</a>
+        <a href="#analyzer" class="nav-link" id="mob-analyzer-btn">Result Analyzer</a>
+        <a href="#analysis" class="nav-link" id="mob-analysis-btn">Analysis</a>
+        <a href="#grade-rules" class="nav-link" id="mob-rules-btn">Grade Rules</a>
+    </div>
+
+    <main class="main-content">
+        <section class="hero-section">
+            <div class="hero-container">
+                <h1 class="hero-title">NITS Academic Insight</h1>
+                <p class="hero-description">Calculate, analyze and understand your academic performance.</p>
+                <div class="hero-actions">
+                    <a href="#calculator" class="btn btn-primary" id="hero-calc-btn">Start Calculating</a>
+                </div>
+            </div>
+        </section>
+
+        <div class="container" id="calculator">
+            <section class="results-dashboard">
+                <div class="dashboard-grid dashboard-grid-5">
+                    <div class="result-card">
+                        <div class="result-card-header">
+                            <span class="result-card-title">Current SGPA</span>
+                            <span class="result-card-subtitle" id="current-sem-title">Semester 1</span>
+                        </div>
+                        <div class="result-card-value primary-val" id="card-current-sgpa">&mdash;</div>
+                        <div class="result-card-footer">Semester %: <span id="current-sgpa-pct">&mdash;</span></div>
+                    </div>
+                    <div class="result-card">
+                        <div class="result-card-header">
+                            <span class="result-card-title">Overall CGPA</span>
+                            <span class="result-card-subtitle">All Semesters</span>
+                        </div>
+                        <div class="result-card-value primary-val" id="card-overall-cgpa">&mdash;</div>
+                        <div class="result-card-footer">Cumulative %: <span id="overall-cgpa-pct">&mdash;</span></div>
+                    </div>
+                    <div class="result-card">
+                        <div class="result-card-header">
+                            <span class="result-card-title">Percentage</span>
+                            <span class="result-card-subtitle">CGPA &times; 10</span>
+                        </div>
+                        <div class="result-card-value primary-val" id="card-percentage">&mdash;</div>
+                        <div class="result-card-footer">Overall equivalent</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="result-card-header">
+                            <span class="result-card-title">Total Credits</span>
+                            <span class="result-card-subtitle">Earned Credits</span>
+                        </div>
+                        <div class="result-card-value" id="card-total-credits">&mdash;</div>
+                        <div class="result-card-footer">Across all semesters</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="result-card-header">
+                            <span class="result-card-title">Active Backlogs</span>
+                            <span class="result-card-subtitle">F / W Grades</span>
+                        </div>
+                        <div class="result-card-value danger-val" id="card-active-backlogs">&mdash;</div>
+                        <div class="result-card-footer" id="card-active-backlogs-footer">No active backlogs</div>
+                    </div>
+                </div>
+            </section>
+
+            <div style="display:none;" aria-hidden="true">
+                <div id="card-selected-cgpa">&mdash;</div>
+                <div id="selected-cgpa-pct">&mdash;</div>
+                <div id="card-cleared-backlogs">&mdash;</div>
+                <div id="card-supp-attempts">&mdash;</div>
+                <div id="card-reexam-attempts">&mdash;</div>
+                <div id="card-improve-attempts">&mdash;</div>
+                <div id="card-withdrawn-courses">&mdash;</div>
+                <div id="card-status">&mdash;</div>
+                <div id="card-status-footer">&mdash;</div>
+                <div id="status-sem-title">&mdash;</div>
+            </div>
+
+            <section class="calculator-section">
+                <div class="calculator-card">
+                    <div class="calculator-card-header">
+                        <div>
+                            <h2>Manual Result Calculator</h2>
+                            <span class="card-subtitle">Enter course details and grades to calculate your semester performance.</span>
+                        </div>
+                    </div>
+
+                    <div class="calc-method-bar">
+                        <span class="calc-method-label">Calculation Method:</span>
+                        <label class="calc-method-option"><input type="radio" name="calc-method" value="grade" checked> Grade</label>
+                        <label class="calc-method-option"><input type="radio" name="calc-method" value="marks"> Marks &rarr; Grade</label>
+                    </div>
+
+                    <div class="mode-helper-box">
+                        <p id="grade-method-desc" style="display:block;">Use this mode when your grade card already gives letter grades.</p>
+                        <p id="marks-method-desc" style="display:none;">Enter marks only when you need the calculator to determine the grade. Marks are normalized to 100 according to the NIT Silchar M.Tech grading rules.</p>
+                    </div>
+
+                    <div class="semester-tabs">
+                        <button class="sem-tab active" data-sem="sem1" id="tab-sem1">Semester 1</button>
+                        <button class="sem-tab" data-sem="sem2" id="tab-sem2">Semester 2</button>
+                        <button class="sem-tab" data-sem="sem3" id="tab-sem3">Semester 3</button>
+                        <button class="sem-tab" data-sem="sem4" id="tab-sem4">Semester 4</button>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="subjects-table" id="subjects-table">
+                            <thead>
+                                <tr>
+                                    <th>Course</th>
+                                    <th style="width:140px;" class="col-type">Type</th>
+                                    <th style="width:80px;text-align:center;" class="col-obtained">Obtained</th>
+                                    <th style="width:80px;text-align:center;" class="col-max">Max</th>
+                                    <th style="width:80px;text-align:center;">Credits</th>
+                                    <th style="width:120px;text-align:center;">Grade</th>
+                                    <th style="width:60px;text-align:center;">GP</th>
+                                    <th style="width:100px;text-align:center;">Status</th>
+                                    <th style="width:50px;text-align:center;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="subject-rows-container"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="empty-state" id="empty-state-message">
+                        <span class="empty-state-icon">&#x1F4CB;</span>
+                        <p class="empty-state-text">No courses added yet</p>
+                        <p class="empty-state-sub">Add a subject to begin calculating your semester result.</p>
+                    </div>
+
+                    <div class="calc-actions-bar">
+                        <button type="button" class="btn btn-add-subject" id="add-subject-btn">+ Add Subject</button>
+                    </div>
+
+                    <div class="semester-overview" id="semester-overview-panel" style="display:none;">
+                        <div class="overview-grid">
+                            <div class="overview-item"><span class="overview-label">Semester Credits</span><span class="overview-value" id="overview-credits">0</span></div>
+                            <div class="overview-item"><span class="overview-label">Semester Points</span><span class="overview-value" id="overview-points">0</span></div>
+                            <div class="overview-item"><span class="overview-label">Semester SGPA</span><span class="overview-value" id="overview-sgpa">&mdash;</span></div>
+                            <div class="overview-item"><span class="overview-label">Percentage</span><span class="overview-value" id="overview-percentage">&mdash;</span></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="combined-analysis-section">
+                <div class="analysis-card">
+                    <div class="analysis-layout">
+                        <div class="analysis-left">
+                            <div><h3>Combined Academic Analysis</h3><p class="analysis-card-desc">Select semesters to calculate a combined CGPA.</p></div>
+                            <div class="analysis-controls">
+                                <button type="button" class="btn-text" id="analysis-select-all">Select All</button>
+                                <span class="divider">|</span>
+                                <button type="button" class="btn-text" id="analysis-clear-all">Clear All</button>
+                            </div>
+                            <div class="checkbox-group">
+                                <label class="checkbox-label"><input type="checkbox" class="analysis-checkbox" data-sem="sem1" id="check-sem1"><span class="custom-checkbox"></span> Semester 1</label>
+                                <label class="checkbox-label"><input type="checkbox" class="analysis-checkbox" data-sem="sem2" id="check-sem2"><span class="custom-checkbox"></span> Semester 2</label>
+                                <label class="checkbox-label"><input type="checkbox" class="analysis-checkbox" data-sem="sem3" id="check-sem3"><span class="custom-checkbox"></span> Semester 3</label>
+                                <label class="checkbox-label"><input type="checkbox" class="analysis-checkbox" data-sem="sem4" id="check-sem4"><span class="custom-checkbox"></span> Semester 4</label>
+                            </div>
+                        </div>
+                        <div class="analysis-right">
+                            <div class="analysis-metric-box"><span class="analysis-metric-label">Selected CGPA</span><div class="analysis-metric-value" id="dash-selected-cgpa">&mdash;</div></div>
+                            <div class="analysis-metric-box"><span class="analysis-metric-label">Selected Credits</span><div class="analysis-metric-value" id="selected-credits">&mdash;</div></div>
+                            <div class="analysis-metric-box"><span class="analysis-metric-label">Percentage</span><div class="analysis-metric-value" id="selected-cgpa-pct">&mdash;</div></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="summary-section">
+                <div class="card">
+                    <div class="card-header"><span class="card-title">Semester Summary</span></div>
+                    <div class="summary-table-container">
+                        <div class="empty-state-small" id="summary-empty-message">No semester results available yet. Add courses in the calculator to populate.</div>
+                        <table class="summary-table" style="display:none;">
+                            <thead><tr><th>Semester</th><th>Credits</th><th>SGPA</th><th>Backlogs</th><th>Status</th></tr></thead>
+                            <tbody id="summary-rows-container"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section class="analyzer-section" id="analyzer">
+                <div class="analyzer-card">
+                    <div class="card-header">
+                        <div>
+                            <span class="card-title">Result Analyzer</span>
+                            <span class="card-subtitle" style="display:block;margin-top:2px;">Upload your NIT Silchar grade card or marksheet for extraction. Supports PDF, JPG, JPEG, PNG &mdash; max 10 MB.</span>
+                        </div>
+                    </div>
+                    <div class="service-offline-notice" id="service-offline-notice" style="display:none;background:var(--warning-light);border:1px solid rgba(180,83,9,.2);border-left:4px solid var(--warning);padding:12px;border-radius:var(--r-sm);font-size:0.8rem;margin-bottom:12px;">
+                        <span>&#9888;</span><p><strong>Document Analysis Offline</strong> &mdash; Manual calculation is fully functional.</p>
+                    </div>
+                    <div style="position:relative;min-height:140px;margin-bottom:12px;">
+                        <div class="upload-area" id="upload-dropzone">
+                            <div class="upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+                            <p class="upload-text">Drop result here or <span class="upload-link">Browse Files</span></p>
+                            <p class="upload-sub">PDF &bull; JPG &bull; JPEG &bull; PNG &bull; Max 10 MB</p>
+                            <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png" style="display:none;">
+                        </div>
+                        <div class="preview-panel" id="preview-panel" style="display:none;">
+                            <div class="preview-meta">
+                                <div class="preview-icon" id="preview-icon-type">&#x1F4C4;</div>
+                                <div class="preview-details"><div class="preview-filename" id="preview-filename">result_doc.pdf</div><div class="preview-filesize" id="preview-filesize">1.2 MB</div></div>
+                                <button type="button" class="btn btn-outline-danger btn-sm" id="remove-file-btn">Remove File</button>
+                            </div>
+                            <div class="image-preview-wrapper" id="image-preview-wrapper"><img src="" alt="" id="preview-image"></div>
+                            <div class="pdf-preview-placeholder" id="pdf-preview-placeholder"></div>
+                            <div class="preview-actions"><button type="button" class="btn btn-primary btn-sm" id="analyze-btn">Analyze Document</button></div>
+                        </div>
+                        <div class="processing-panel" id="processing-panel" style="display:none;">
+                            <div class="spinner"></div><p class="processing-text">Analyzing document...</p><p class="processing-sub">Extracting course codes, marks, grades, and credits...</p>
+                        </div>
+                    </div>
+                    <div class="verification-panel" id="verification-panel" style="display:none;margin-top:16px;border-top:1px solid var(--border);padding-top:16px;">
+                        <div class="verification-header" style="margin-bottom:12px;"><h3>Review Extracted Data</h3><span class="badge badge-w">Verification Required</span></div>
+                        <div style="background:var(--warning-light);border-left:3px solid var(--warning);padding:8px 12px;font-size:0.8rem;border-radius:var(--r-sm);margin-bottom:16px;"><strong>Verification Step:</strong> Inspect details below. Once confirmed, import to fill the calculator.</div>
+                        <div class="table-container">
+                            <table class="verification-table" id="verification-table">
+                                <thead><tr>
+                                    <th style="width:130px;">Semester</th><th>Course Code</th><th>Course Name</th>
+                                    <th style="width:70px;text-align:center;">Credits</th><th style="width:70px;text-align:center;">Obtained</th><th style="width:70px;text-align:center;">Max</th>
+                                    <th style="width:100px;">Grade</th><th style="width:120px;">Course Type</th><th style="width:120px;">Attempt Type</th><th style="width:50px;text-align:center;">Remove</th>
+                                </tr></thead>
+                                <tbody id="verification-rows-container"></tbody>
+                            </table>
+                        </div>
+                        <div style="margin-bottom:16px;"><button type="button" class="btn btn-secondary btn-sm" id="add-verification-row-btn"><span class="btn-icon">+</span> Add Course Row</button></div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px;">
+                            <div style="background:var(--background);padding:12px;border-radius:var(--r-md);border:1px solid var(--border);">
+                                <h4 style="font-size:0.72rem;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Document SGPA</h4>
+                                <input type="number" step="any" class="input-verify-metric" id="doc-sgpa-input" placeholder="e.g. 7.06" style="min-height:32px;padding:4px 8px;">
+                                <div style="font-size:0.78rem;margin-top:6px;">Calculated: <span id="calc-sgpa-verify">&mdash;</span></div>
+                                <div class="compare-status" id="sgpa-compare-status" style="font-size:0.78rem;margin-top:4px;"></div>
+                            </div>
+                            <div style="background:var(--background);padding:12px;border-radius:var(--r-md);border:1px solid var(--border);">
+                                <h4 style="font-size:0.72rem;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Document CGPA</h4>
+                                <input type="number" step="any" class="input-verify-metric" id="doc-cgpa-input" placeholder="e.g. 6.76" style="min-height:32px;padding:4px 8px;">
+                                <div style="font-size:0.78rem;margin-top:6px;">Calculated: <span id="calc-cgpa-verify">&mdash;</span></div>
+                                <div class="compare-status" id="cgpa-compare-status" style="font-size:0.78rem;margin-top:4px;"></div>
+                            </div>
+                        </div>
+                        <div style="display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--border);padding-top:12px;">
+                            <button type="button" class="btn btn-secondary btn-sm" id="cancel-extraction-btn">Cancel</button>
+                            <button type="button" class="btn btn-primary btn-sm" id="confirm-import-btn">Confirm &amp; Import</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <div class="link-warning-container" id="link-warning-container" style="display:none;margin-bottom:24px;">
+                <div style="background:var(--warning-light);border:1px solid rgba(180,83,9,.2);border-radius:var(--r-md);padding:16px;display:flex;gap:12px;align-items:flex-start;">
+                    <span>&#9888;</span>
+                    <div>
+                        <strong style="font-size:0.88rem;color:var(--text);">Possible repeated attempts detected:</strong>
+                        <p id="link-warning-desc" style="font-size:0.8rem;color:var(--muted);margin:2px 0 10px 0;">Some courses have matching codes but are not linked.</p>
+                        <div id="link-warning-actions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <section class="attempt-history-section" id="attempt-history-section">
+                <div class="card">
+                    <div class="card-header" id="history-accordion-header" style="cursor:pointer;border-bottom:none;padding-bottom:0;margin-bottom:0;">
+                        <button class="accordion-trigger" type="button" aria-expanded="false" aria-controls="history-accordion-content">
+                            <span>Academic Attempt History</span><span id="accordion-toggle-icon" class="accordion-chevron">[ Expand + ]</span>
+                        </button>
+                    </div>
+                    <div class="accordion-content" id="history-accordion-content" style="display:none;">
+                        <div class="summary-table-container">
+                            <div class="empty-state-small" id="history-empty-message">No repeated course attempts detected yet.</div>
+                            <table class="summary-table" id="history-table" style="display:none;width:100%;">
+                                <thead><tr><th>Course</th><th style="text-align:center;">Semester</th><th style="text-align:center;">Original Grade</th><th style="text-align:center;">Latest Grade</th><th style="text-align:center;">Attempt Type</th><th style="text-align:center;">Status</th><th style="text-align:center;">Actions</th></tr></thead>
+                                <tbody id="history-rows-container"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="dashboard-section" id="analysis">
+                <div class="card" style="margin-bottom:24px;">
+                    <div class="card-header"><div><h2>Academic Analysis</h2><span class="card-subtitle">Comprehensive analytics dynamically calculated from your resolved academic records.</span></div></div>
+                    <div class="dashboard-empty-card" id="dashboard-empty-state">
+                        <span style="font-size:1.5rem;display:block;margin-bottom:4px;opacity:0.5;">&#x1F4CA;</span>
+                        <h3>No Academic Data Available Yet</h3><p>Add subjects manually or upload result documents to populate this analysis.</p>
+                    </div>
+                    <div id="dashboard-contents" style="display:none;">
+                        <div class="dashboard-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:16px;">
+                            <div class="dash-card"><span style="font-size:0.68rem;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:2px;font-weight:600;">Current SGPA</span><div id="dash-current-sgpa" style="font-size:1.5rem;font-weight:800;color:var(--primary);">&mdash;</div><span style="font-size:0.65rem;color:var(--muted);display:block;">Active Semester</span></div>
+                            <div class="dash-card"><span style="font-size:0.68rem;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:2px;font-weight:600;">Overall CGPA</span><div id="dash-overall-cgpa" style="font-size:1.5rem;font-weight:800;color:var(--primary);">&mdash;</div><span style="font-size:0.65rem;color:var(--muted);display:block;">Credit Weighted</span></div>
+                            <div class="dash-card"><span style="font-size:0.68rem;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:2px;font-weight:600;">Selected CGPA</span><div id="dash-selected-cgpa" style="font-size:1.5rem;font-weight:800;color:var(--primary);">&mdash;</div><span id="dash-selected-semesters-label" style="font-size:0.65rem;color:var(--muted);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Custom Selection</span></div>
+                            <div class="dash-card"><span style="font-size:0.68rem;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:2px;font-weight:600;">Percentage</span><div id="dash-percentage" style="font-size:1.5rem;font-weight:800;color:var(--primary);">&mdash;</div><span style="font-size:0.65rem;color:var(--muted);display:block;">CGPA &times; 10</span></div>
+                            <div class="dash-card"><span style="font-size:0.68rem;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:2px;font-weight:600;">Total Credits</span><div id="dash-total-credits" style="font-size:1.5rem;font-weight:800;color:var(--primary);">&mdash;</div><span style="font-size:0.65rem;color:var(--muted);display:block;">Earned Credits</span></div>
+                            <div class="dash-card"><span style="font-size:0.68rem;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:2px;font-weight:600;">Active Backlogs</span><div id="dash-active-backlogs" style="font-size:1.5rem;font-weight:800;color:var(--danger);">&mdash;</div><span id="dash-backlog-summary-footer" style="font-size:0.65rem;color:var(--muted);display:block;">Unresolved F/W Grades</span></div>
+                        </div>
+                        <div class="dashboard-row-grid" style="margin-bottom:16px;">
+                            <div class="dash-subcard">
+                                <h4 style="font-size:0.85rem;font-weight:700;margin-bottom:8px;">Semester Performance</h4>
+                                <div class="table-container" style="flex-grow:1;"><table class="dash-table"><thead><tr><th>Semester</th><th style="text-align:center;">Credits</th><th style="text-align:center;">SGPA</th><th style="text-align:center;">Backlogs</th><th style="text-align:center;">Status</th></tr></thead><tbody id="dash-semester-rows"></tbody></table></div>
+                                <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;gap:24px;">
+                                    <div><span style="font-size:0.68rem;text-transform:uppercase;color:var(--muted);display:block;">Best Semester</span><div id="dash-best-sem" style="font-weight:700;color:var(--success);font-size:0.82rem;">&mdash;</div></div>
+                                    <div><span style="font-size:0.68rem;text-transform:uppercase;color:var(--muted);display:block;">Lowest Semester</span><div id="dash-lowest-sem" style="font-weight:700;color:var(--danger);font-size:0.82rem;">&mdash;</div></div>
+                                </div>
+                            </div>
+                            <div class="dash-subcard"><h4 style="font-size:0.85rem;font-weight:700;margin-bottom:8px;">SGPA Trend</h4><div id="semester-chart-container" style="flex-grow:1;display:flex;align-items:center;justify-content:center;min-height:140px;"></div></div>
+                        </div>
+                        <div class="dash-subcard" style="margin-bottom:16px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;border-bottom:1px solid var(--border);padding-bottom:6px;">
+                                <h4 style="font-size:0.85rem;font-weight:700;">Subject Performance</h4>
+                                <div class="filters-bar">
+                                    <div class="search-input-wrapper"><input type="text" id="dash-search-input" class="dash-search-input" placeholder="Search code/name..."></div>
+                                    <select id="filter-semester" class="select-type"><option value="all">All Semesters</option><option value="sem1">Semester 1</option><option value="sem2">Semester 2</option><option value="sem3">Semester 3</option><option value="sem4">Semester 4</option></select>
+                                    <select id="filter-status" class="select-type"><option value="all">All Statuses</option><option value="passed">Passed</option><option value="backlog">Backlog</option><option value="withdrawn">Withdrawn</option><option value="cleared">Cleared</option><option value="improved">Improved</option></select>
+                                    <select id="filter-grade" class="select-type"><option value="all">All Grades</option><option value="AA">AA</option><option value="AB">AB</option><option value="BB">BB</option><option value="BC">BC</option><option value="CC">CC</option><option value="CD">CD</option><option value="DD">DD</option><option value="F">F</option><option value="W">W</option></select>
+                                    <select id="filter-attempt" class="select-type"><option value="all">All Attempts</option><option value="original">Original</option><option value="supplementary">Supplementary</option><option value="re-examination">Re-examination</option><option value="improvement">Improvement</option></select>
+                                    <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-filters" style="min-height:30px;">Clear</button>
+                                </div>
+                            </div>
+                            <div class="table-container">
+                                <table class="dash-table"><thead><tr><th>Semester</th><th>Course Code</th><th>Course Name</th><th style="text-align:center;">Credits</th><th style="text-align:center;">Grade</th><th style="text-align:center;">GP</th><th style="text-align:center;">Status</th><th style="text-align:center;">Attempt</th></tr></thead><tbody id="dash-subject-rows"></tbody></table>
+                                <div class="empty-state-small" id="dash-subjects-empty" style="display:none;padding:12px 0;text-align:center;color:var(--muted);">No resolved courses match the chosen filters.</div>
+                            </div>
+                        </div>
+                        <div class="dashboard-row-grid" style="margin-bottom:16px;">
+                            <div class="dash-subcard"><h4 style="font-size:0.85rem;font-weight:700;margin-bottom:8px;">Grade Distribution</h4><div id="grade-distribution-empty" class="empty-state-small" style="display:none;padding:12px 0;text-align:center;color:var(--muted);">No grade distribution available.</div><div class="grade-distribution-bars" id="grade-distribution-container"></div></div>
+                            <div class="dash-subcard" style="display:flex;flex-direction:column;">
+                                <h4 style="font-size:0.85rem;font-weight:700;margin-bottom:8px;">Credits Breakdown</h4>
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex-grow:1;">
+                                    <div style="background:var(--surface);border:1px solid var(--border);padding:8px;border-radius:var(--r-sm);text-align:center;"><span style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;display:block;font-weight:600;">Credits Entered</span><div id="credit-entered" style="font-size:1.1rem;font-weight:800;color:var(--text);">&mdash;</div></div>
+                                    <div style="background:var(--surface);border:1px solid var(--border);padding:8px;border-radius:var(--r-sm);text-align:center;"><span style="font-size:0.68rem;color:var(--success);text-transform:uppercase;display:block;font-weight:600;">Credits Passed</span><div id="credit-passed" style="font-size:1.1rem;font-weight:800;color:var(--success);">&mdash;</div></div>
+                                    <div style="background:var(--surface);border:1px solid var(--border);padding:8px;border-radius:var(--r-sm);text-align:center;"><span style="font-size:0.68rem;color:var(--danger);text-transform:uppercase;display:block;font-weight:600;">Backlog Credits</span><div id="credit-backlog" style="font-size:1.1rem;font-weight:800;color:var(--danger);">&mdash;</div></div>
+                                    <div style="background:var(--surface);border:1px solid var(--border);padding:8px;border-radius:var(--r-sm);text-align:center;"><span style="font-size:0.68rem;color:var(--warning);text-transform:uppercase;display:block;font-weight:600;">Withdrawn Credits</span><div id="credit-withdrawn" style="font-size:1.1rem;font-weight:800;color:var(--warning);">&mdash;</div></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="dashboard-grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:12px;">
+                            <div class="dash-subcard"><h4 style="font-size:0.85rem;font-weight:700;margin-bottom:8px;">Academic Attempts</h4><div id="attempts-summary-empty" class="empty-state-small" style="display:none;padding:12px 0;text-align:center;color:var(--muted);">No repeated attempts detected.</div><div id="attempts-summary-container"></div></div>
+                            <div class="dash-subcard">
+                                <h4 style="font-size:0.85rem;font-weight:700;margin-bottom:8px;">Final Academic Status</h4>
+                                <div id="final-status-card" style="padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);text-align:center;"><div id="final-status-title" style="font-size:0.9rem;font-weight:800;text-transform:uppercase;margin-bottom:4px;color:var(--muted);">No Academic Data</div><p id="final-status-desc" style="font-size:0.78rem;color:var(--muted);margin:0;line-height:1.4;">Add subjects to calculate standing status.</p></div>
+                                <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:8px;margin-top:8px;font-size:0.72rem;color:var(--muted);"><span>Source: <strong id="dash-source-indicator">&mdash;</strong></span><span>Quality: <strong id="dash-quality-indicator">&mdash;</strong></span></div>
+                            </div>
+                            <div class="dash-subcard"><h4 style="font-size:0.85rem;font-weight:700;margin-bottom:8px;">Performance Insights</h4><ul id="insights-list-container" style="padding-left:0;list-style:none;"></ul></div>
+                        </div>
+                        <div style="display:flex;justify-content:flex-end;margin-top:12px;border-top:1px solid var(--border);padding-top:12px;"><button type="button" class="btn btn-primary btn-sm" id="print-analysis-btn">&#x1F5A8;&#xFE0F; Print / Save Analysis</button></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <section class="grade-rules-section" id="grade-rules">
+            <div class="container">
+                <div class="section-header"><h2>M.Tech Grade Rules</h2><p class="section-subtitle">Official NIT Silchar postgraduate grading system reference.</p></div>
+                <div class="rules-layout">
+                    <div>
+                        <div class="rules-tabs">
+                            <button type="button" class="rules-tab active" id="tab-rule-theory">Theory Course Rules</button>
+                            <button type="button" class="rules-tab" id="tab-rule-other">Other than Theory (Thesis/Labs)</button>
+                        </div>
+                        <div class="rule-table-card rules-tab-panel active" id="panel-rule-theory">
+                            <h3>M.Tech Theory Grading Scale</h3>
+                            <div class="rule-table-container"><table class="rule-detail-table"><thead><tr><th>Marks Range</th><th>Grade</th><th>Grade Point</th></tr></thead><tbody>
+                                <tr><td>91 &ndash; 100</td><td><span class="badge badge-aa">AA</span></td><td>10</td></tr>
+                                <tr><td>81 &ndash; 90</td><td><span class="badge badge-ab">AB</span></td><td>9</td></tr>
+                                <tr><td>71 &ndash; 80</td><td><span class="badge badge-bb">BB</span></td><td>8</td></tr>
+                                <tr><td>61 &ndash; 70</td><td><span class="badge badge-bc">BC</span></td><td>7</td></tr>
+                                <tr><td>52 &ndash; 60</td><td><span class="badge badge-cc">CC</span></td><td>6</td></tr>
+                                <tr><td>43 &ndash; 51</td><td><span class="badge badge-cd">CD</span></td><td>5</td></tr>
+                                <tr><td>35 &ndash; 42</td><td><span class="badge badge-dd">DD</span></td><td>4</td></tr>
+                                <tr><td>Below 35</td><td><span class="badge badge-f">F</span></td><td>0</td></tr>
+                            </tbody></table></div>
+                        </div>
+                        <div class="rule-table-card rules-tab-panel" id="panel-rule-other">
+                            <h3>Other than Theory Grading Scale</h3>
+                            <div class="rule-table-container"><table class="rule-detail-table"><thead><tr><th>Marks Range</th><th>Grade</th><th>Grade Point</th></tr></thead><tbody>
+                                <tr><td>94 &ndash; 100</td><td><span class="badge badge-aa">AA</span></td><td>10</td></tr>
+                                <tr><td>87 &ndash; 93</td><td><span class="badge badge-ab">AB</span></td><td>9</td></tr>
+                                <tr><td>80 &ndash; 86</td><td><span class="badge badge-bb">BB</span></td><td>8</td></tr>
+                                <tr><td>73 &ndash; 79</td><td><span class="badge badge-bc">BC</span></td><td>7</td></tr>
+                                <tr><td>65 &ndash; 72</td><td><span class="badge badge-cc">CC</span></td><td>6</td></tr>
+                                <tr><td>57 &ndash; 64</td><td><span class="badge badge-cd">CD</span></td><td>5</td></tr>
+                                <tr><td>50 &ndash; 56</td><td><span class="badge badge-dd">DD</span></td><td>4</td></tr>
+                                <tr><td>Below 50</td><td><span class="badge badge-f">F</span></td><td>0</td></tr>
+                            </tbody></table></div>
+                        </div>
+                    </div>
+                    <div class="rule-table-card">
+                        <h3>Grade Point System &amp; Conversion</h3>
+                        <div class="mapping-list">
+                            <div class="mapping-item"><span><strong>AA</strong> Grade</span><span>10 Points</span></div>
+                            <div class="mapping-item"><span><strong>AB</strong> Grade</span><span>9 Points</span></div>
+                            <div class="mapping-item"><span><strong>BB</strong> Grade</span><span>8 Points</span></div>
+                            <div class="mapping-item"><span><strong>BC</strong> Grade</span><span>7 Points</span></div>
+                            <div class="mapping-item"><span><strong>CC</strong> Grade</span><span>6 Points</span></div>
+                            <div class="mapping-item"><span><strong>CD</strong> Grade</span><span>5 Points</span></div>
+                            <div class="mapping-item"><span><strong>DD</strong> Grade</span><span>4 Points</span></div>
+                            <div class="mapping-item"><span><strong>F</strong> Grade (Backlog)</span><span>0 Points</span></div>
+                            <div class="mapping-item"><span><strong>W</strong> Grade (Withdrawn/Fail)</span><span>0 Points</span></div>
+                        </div>
+                        <div class="formula-box">
+                            <h4>SGPA / CGPA Formula</h4>
+                            <div class="formula-math" style="text-align:left;margin:4px 0 8px 0;font-size:0.8rem;color:var(--primary);">SGPA = &Sigma;(Credit &times; Grade Point) &divide; &Sigma;(Credits)</div>
+                            <div class="formula-math" style="text-align:left;margin:4px 0 8px 0;font-size:0.8rem;color:var(--primary);">CGPA = &Sigma;(Credit &times; Grade Point) &divide; &Sigma;(Credits)</div>
+                            <h4>Percentage Conversion</h4>
+                            <div class="formula-math" style="text-align:left;margin:4px 0 0 0;font-size:0.8rem;color:var(--primary);">Percentage = CGPA &times; 10</div>
+                        </div>
+                        <div class="rule-note"><strong>Note:</strong> Marks are normalized to 100 before applying the selected course-type grading scale.</div>
+                    </div>
+                </div>
+                <div class="rules-disclaimer">Always verify final academic results against official NIT Silchar records.</div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-container">
+            <p class="footer-brand">NITS Academic Insight</p>
+            <p class="footer-desc">Academic utility for NIT Silchar M.Tech students.</p>
+            <p class="footer-note">Always verify final academic results against official academic records.</p>
+        </div>
+    </footer>
+
+    <div class="modal" id="duplicate-modal" style="display:none;"><div class="modal-overlay"></div><div class="modal-content"><div class="modal-header"><h3>Duplicate Course Detected</h3></div><div class="modal-body"><p id="duplicate-modal-msg">Duplicate course found. How would you like to proceed?</p></div><div class="modal-footer"><button type="button" class="btn btn-primary btn-sm" id="dup-keep-existing">Keep Existing</button><button type="button" class="btn btn-outline-danger btn-sm" id="dup-use-uploaded">Use Uploaded Data</button><button type="button" class="btn btn-secondary btn-sm" id="dup-add-separate">Add Both</button></div></div></div>
+    <div class="modal" id="linking-modal" style="display:none;"><div class="modal-overlay"></div><div class="modal-content"><div class="modal-header"><h3>Link Course Attempts</h3></div><div class="modal-body"><div class="form-group" style="margin-bottom:0.8rem;"><label style="font-weight:600;font-size:0.8rem;display:block;margin-bottom:0.2rem;">Original / Parent Course</label><select id="link-parent-select" class="select-type" style="width:100%;"></select></div><div class="form-group" style="margin-bottom:0.8rem;"><label style="font-weight:600;font-size:0.8rem;display:block;margin-bottom:0.2rem;">Newer Attempt Course</label><select id="link-child-select" class="select-type" style="width:100%;"></select></div><div class="form-group"><label style="font-weight:600;font-size:0.8rem;display:block;margin-bottom:0.2rem;">Attempt Type</label><select id="link-type-select" class="select-type" style="width:100%;"><option value="supplementary">Supplementary</option><option value="re-examination">Re-examination</option><option value="improvement">Improvement</option></select></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" id="cancel-link-btn">Cancel</button><button type="button" class="btn btn-primary btn-sm" id="confirm-link-btn">Confirm Link</button></div></div></div>
+    <div class="modal" id="subject-detail-panel" style="display:none;"><div class="modal-overlay"></div><div class="modal-content" style="max-width:500px;"><div class="modal-header" style="padding:12px 20px;"><h3 id="detail-course-title" style="margin:0;">Course Detail &amp; History</h3><button type="button" class="btn-remove" id="close-detail-btn" style="font-size:1.3rem;">&times;</button></div><div class="modal-body" style="padding:16px 20px;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;"><div><span style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;">Course Code</span><div id="detail-code" style="font-size:1rem;font-weight:700;">CS5106</div></div><div><span style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;">Credits</span><div id="detail-credits" style="font-size:1rem;font-weight:700;">4</div></div><div style="grid-column:span 2;"><span style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;">Course Name</span><div id="detail-name" style="font-size:0.9rem;font-weight:600;">-</div></div></div><h4 style="font-size:0.8rem;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Attempt Timeline</h4><div id="detail-timeline-container" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div><div id="detail-audit-box" style="padding:8px 12px;font-size:0.8rem;border-radius:0 4px 4px 0;border-left-width:3px;margin-bottom:12px;"></div><div class="form-group" style="margin-bottom:12px;" id="detail-attempt-container"><label style="font-weight:600;font-size:0.72rem;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:4px;">Edit Attempt Type</label><select id="detail-attempt-type-select" class="select-type" style="width:100%;min-height:32px;padding:4px 8px;"><option value="original">Original</option><option value="supplementary">Supplementary</option><option value="re-examination">Re-examination</option><option value="improvement">Improvement</option></select></div><div style="background:var(--background);border:1px solid var(--border);padding:10px;border-radius:var(--r-md);display:flex;justify-content:space-between;align-items:center;"><div><span style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;display:block;">Final Applicable Grade</span><span id="detail-final-grade" style="font-size:1.3rem;font-weight:800;color:var(--primary);">BB</span><span id="detail-final-gp" style="font-size:0.8rem;color:var(--muted);margin-left:4px;">(GP: 8)</span></div><div><span style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;display:block;text-align:right;">Status</span><span id="detail-final-status" class="status-text status-text-passed" style="font-size:0.85rem;font-weight:700;">Cleared</span></div></div></div><div class="modal-footer" style="padding:8px 20px;"><button type="button" class="btn btn-outline-danger btn-sm" id="detail-unlink-btn" style="display:none;">Unlink Attempts</button><button type="button" class="btn btn-secondary btn-sm" id="detail-close-btn">Close</button></div></div></div>
+    <div class="modal" id="confirm-modal" style="display:none;"><div class="modal-overlay"></div><div class="modal-content"><div class="modal-header"><h3 id="confirm-modal-title">Confirm Action</h3><button type="button" class="btn-remove" id="confirm-modal-close" style="font-size:1.3rem;">&times;</button></div><div class="modal-body"><p id="confirm-modal-msg">Are you sure?</p></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" id="confirm-modal-cancel">Cancel</button><button type="button" class="btn btn-primary btn-sm" id="confirm-modal-ok">Confirm</button></div></div></div>
+    <div class="toast-container" id="toast-container" aria-live="polite"></div>
+    <script src="script.js"></script>
+</body>
+</html>

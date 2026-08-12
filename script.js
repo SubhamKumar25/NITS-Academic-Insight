@@ -1,0 +1,3330 @@
+/**
+ * NITS Academic Insight
+ * M.Tech Academic Utility for NIT Silchar Students
+ * Fully functional Vanilla JavaScript logic
+ */
+
+// Application State
+const state = {
+    calculationMethod: 'grade', // 'grade' or 'marks'
+    activeSemester: 'sem1', // Current visible semester (sem1, sem2, sem3, sem4)
+    semesters: {
+        sem1: [], // Array of courses: { id, code, courseType, obtainedMarks, maximumMarks, credits, grade, gradeSource, manualGrade, attemptType, parentCourseId, documentType, source }
+        sem2: [],
+        sem3: [],
+        sem4: []
+    },
+    selectedSemesters: {
+        sem1: false, // Checkbox selections for custom CGPA analysis
+        sem2: false,
+        sem3: false,
+        sem4: false
+    },
+    importedDocSgpa: null,
+    importedDocCgpa: null,
+    extractionSession: {
+        file: null,
+        status: 'empty', // 'empty' | 'selected' | 'processing' | 'extracted'
+        extractedSubjects: []
+    },
+    ignoredRepeats: [],
+    resolvedFinalDataset: [],
+    attemptHistories: [],
+    unlinkedRepeats: []
+};
+
+// M.Tech Theory Grading Rules (91-100 AA, 81-90 AB, etc.)
+const THEORY_GRADING = [
+    { min: 91, max: 100, grade: 'AA', gp: 10 },
+    { min: 81, max: 90, grade: 'AB', gp: 9 },
+    { min: 71, max: 80, grade: 'BB', gp: 8 },
+    { min: 61, max: 70, grade: 'BC', gp: 7 },
+    { min: 52, max: 60, grade: 'CC', gp: 6 },
+    { min: 43, max: 51, grade: 'CD', gp: 5 },
+    { min: 35, max: 42, grade: 'DD', gp: 4 },
+    { min: 0, max: 34, grade: 'F', gp: 0 }
+];
+
+// M.Tech Other than Theory Grading Rules (94-100 AA, 87-93 AB, etc.)
+const OTHER_GRADING = [
+    { min: 94, max: 100, grade: 'AA', gp: 10 },
+    { min: 87, max: 93, grade: 'AB', gp: 9 },
+    { min: 80, max: 86, grade: 'BB', gp: 8 },
+    { min: 73, max: 79, grade: 'BC', gp: 7 },
+    { min: 65, max: 72, grade: 'CC', gp: 6 },
+    { min: 57, max: 64, grade: 'CD', gp: 5 },
+    { min: 50, max: 56, grade: 'DD', gp: 4 },
+    { min: 0, max: 49, grade: 'F', gp: 0 }
+];
+
+// Grade Point Mapping Rules
+const GRADE_POINT_MAPPING = {
+    'AA': 10,
+    'AB': 9,
+    'BB': 8,
+    'BC': 7,
+    'CC': 6,
+    'CD': 5,
+    'DD': 4,
+    'F': 0,
+    'W': 0,
+    'PP': 0,
+    'NP': 0,
+    'AU': 0,
+    'Satisfactory': 0,
+    'Unsatisfactory': 0,
+    'I': 0
+};
+
+// DOM Cache
+const dom = {
+    subjectRowsContainer: document.getElementById('subject-rows-container'),
+    emptyStateMessage: document.getElementById('empty-state-message'),
+    addSubjectBtn: document.getElementById('add-subject-btn'),
+    resetBtn: document.getElementById('reset-btn'),
+    semOverviewPanel: document.getElementById('semester-overview-panel'),
+    
+    // Quick Semester Overview Labels
+    overviewCredits: document.getElementById('overview-credits'),
+    overviewPoints: document.getElementById('overview-points'),
+    overviewSgpa: document.getElementById('overview-sgpa'),
+    overviewPercentage: document.getElementById('overview-percentage'),
+
+    // Result Dashboard Cards
+    cardCurrentSgpa: document.getElementById('card-current-sgpa'),
+    currentSgpaPct: document.getElementById('current-sgpa-pct'),
+    currentSemTitle: document.getElementById('current-sem-title'),
+    
+    cardSelectedCgpa: document.getElementById('card-selected-cgpa'),
+    selectedCgpaPct: document.getElementById('selected-cgpa-pct'),
+    
+    cardOverallCgpa: document.getElementById('card-overall-cgpa'),
+    overallCgpaPct: document.getElementById('overall-cgpa-pct'),
+    cardPercentage: document.getElementById('card-percentage'),
+    
+    cardTotalCredits: document.getElementById('card-total-credits'),
+    cardBacklogs: document.getElementById('card-backlogs'),
+    cardBacklogsFooter: document.getElementById('card-backlogs-footer'),
+    
+    cardStatus: document.getElementById('card-status'),
+    cardStatusFooter: document.getElementById('card-status-footer'),
+    statusSemTitle: document.getElementById('status-sem-title'),
+
+    // Sidebar custom checkboxes and buttons
+    checkSem1: document.getElementById('check-sem1'),
+    checkSem2: document.getElementById('check-sem2'),
+    checkSem3: document.getElementById('check-sem3'),
+    checkSem4: document.getElementById('check-sem4'),
+    analysisSelectAll: document.getElementById('analysis-select-all'),
+    analysisClearAll: document.getElementById('analysis-clear-all'),
+    summaryRowsContainer: document.getElementById('summary-rows-container'),
+    summaryEmptyMessage: document.getElementById('summary-empty-message'),
+
+    // Part 3 elements
+    uploadDropzone: document.getElementById('upload-dropzone'),
+    fileInput: document.getElementById('file-input'),
+    previewPanel: document.getElementById('preview-panel'),
+    previewFilename: document.getElementById('preview-filename'),
+    previewFilesize: document.getElementById('preview-filesize'),
+    previewIconType: document.getElementById('preview-icon-type'),
+    imagePreviewWrapper: document.getElementById('image-preview-wrapper'),
+    previewImage: document.getElementById('preview-image'),
+    pdfPreviewPlaceholder: document.getElementById('pdf-preview-placeholder'),
+    removeFileBtn: document.getElementById('remove-file-btn'),
+    analyzeBtn: document.getElementById('analyze-btn'),
+    processingPanel: document.getElementById('processing-panel'),
+    verificationPanel: document.getElementById('verification-panel'),
+    verificationRowsContainer: document.getElementById('verification-rows-container'),
+    addVerificationRowBtn: document.getElementById('add-verification-row-btn'),
+    confirmImportBtn: document.getElementById('confirm-import-btn'),
+    cancelExtractionBtn: document.getElementById('cancel-extraction-btn'),
+    docSgpaInput: document.getElementById('doc-sgpa-input'),
+    docCgpaInput: document.getElementById('doc-cgpa-input'),
+    calcSgpaVerify: document.getElementById('calc-sgpa-verify'),
+    calcCgpaVerify: document.getElementById('calc-cgpa-verify'),
+    sgpaCompareStatus: document.getElementById('sgpa-compare-status'),
+    cgpaCompareStatus: document.getElementById('cgpa-compare-status'),
+    duplicateModal: document.getElementById('duplicate-modal'),
+    duplicateModalMsg: document.getElementById('duplicate-modal-msg'),
+    dupKeepExisting: document.getElementById('dup-keep-existing'),
+    dupUseUploaded: document.getElementById('dup-use-uploaded'),
+    dupAddSeparate: document.getElementById('dup-add-separate'),
+    
+    // Part 6 Dashboard elements
+    dashboardSection: document.getElementById('dashboard-section'),
+    dashboardEmptyState: document.getElementById('dashboard-empty-state'),
+    dashboardContents: document.getElementById('dashboard-contents'),
+    dashCurrentSgpa: document.getElementById('dash-current-sgpa'),
+    dashOverallCgpa: document.getElementById('dash-overall-cgpa'),
+    dashSelectedCgpa: document.getElementById('dash-selected-cgpa'),
+    dashSelectedSemestersLabel: document.getElementById('dash-selected-semesters-label'),
+    dashPercentage: document.getElementById('dash-percentage'),
+    dashTotalCredits: document.getElementById('dash-total-credits'),
+    dashActiveBacklogs: document.getElementById('dash-active-backlogs'),
+    dashSemesterRows: document.getElementById('dash-semester-rows'),
+    dashBestSem: document.getElementById('dash-best-sem'),
+    dashLowestSem: document.getElementById('dash-lowest-sem'),
+    semesterChartContainer: document.getElementById('semester-chart-container'),
+    filterSemester: document.getElementById('filter-semester'),
+    filterStatus: document.getElementById('filter-status'),
+    filterGrade: document.getElementById('filter-grade'),
+    dashSubjectRows: document.getElementById('dash-subject-rows'),
+    dashSubjectsEmpty: document.getElementById('dash-subjects-empty'),
+    gradeDistributionContainer: document.getElementById('grade-distribution-container'),
+    gradeDistributionEmpty: document.getElementById('grade-distribution-empty'),
+    creditEntered: document.getElementById('credit-entered'),
+    creditPassed: document.getElementById('credit-passed'),
+    creditBacklog: document.getElementById('credit-backlog'),
+    creditWithdrawn: document.getElementById('credit-withdrawn'),
+    attemptsSummaryContainer: document.getElementById('attempts-summary-container'),
+    attemptsSummaryEmpty: document.getElementById('attempts-summary-empty'),
+    finalStatusCard: document.getElementById('final-status-card'),
+    finalStatusTitle: document.getElementById('final-status-title'),
+    finalStatusDesc: document.getElementById('final-status-desc'),
+    dashSourceIndicator: document.getElementById('dash-source-indicator'),
+    dashQualityIndicator: document.getElementById('dash-quality-indicator'),
+    insightsListContainer: document.getElementById('insights-list-container'),
+    printAnalysisBtn: document.getElementById('print-analysis-btn')
+};
+
+// Initial setup
+document.addEventListener('DOMContentLoaded', () => {
+    initEventListeners();
+    initAnalyzerEvents();
+    initAttemptEvents();
+    render();
+});
+
+// Initialize All UI Event Listeners
+function initEventListeners() {
+    // Radio toggle for calculation method
+    document.querySelectorAll('input[name="calc-method"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            state.calculationMethod = e.target.value;
+            toggleCalculatorMode();
+            render();
+        });
+    });
+    // Initial mode layout setup
+    toggleCalculatorMode();
+
+    // Add Course Row
+    dom.addSubjectBtn.addEventListener('click', () => {
+        addSubject(state.activeSemester);
+    });
+
+    // Reset Calculator
+    dom.resetBtn.addEventListener('click', () => {
+        showConfirmModal('Are you sure you want to reset all data? This will clear all semesters.', () => {
+            resetCalculator();
+            showToast('All semesters reset successfully.', 'success');
+        });
+    });
+
+    // Semester Tabs switching
+    document.querySelectorAll('.sem-tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            document.querySelectorAll('.sem-tab').forEach(t => t.classList.remove('active'));
+            e.target.classList.add('active');
+            state.activeSemester = e.target.getAttribute('data-sem');
+            render();
+        });
+    });
+
+    // Custom CGPA Checkboxes
+    const checkboxes = [dom.checkSem1, dom.checkSem2, dom.checkSem3, dom.checkSem4];
+    checkboxes.forEach(chk => {
+        chk.addEventListener('change', (e) => {
+            const sem = e.target.getAttribute('data-sem');
+            state.selectedSemesters[sem] = e.target.checked;
+            calculateAndRefresh();
+        });
+    });
+
+    // Custom analysis actions
+    dom.analysisSelectAll.addEventListener('click', () => {
+        setAllCheckboxes(true);
+    });
+
+    dom.analysisClearAll.addEventListener('click', () => {
+        setAllCheckboxes(false);
+    });
+
+    // Filter dropdown elements change listeners
+    dom.filterSemester.addEventListener('change', () => {
+        renderSubjectTable();
+    });
+    dom.filterStatus.addEventListener('change', () => {
+        renderSubjectTable();
+    });
+    dom.filterGrade.addEventListener('change', () => {
+        renderSubjectTable();
+    });
+
+    // Print analysis trigger
+    dom.printAnalysisBtn.addEventListener('click', () => {
+        window.print();
+    });
+}
+
+// -------------------------------------------------------------
+// CORE DYNAMIC RENDER FUNCTIONS
+// -------------------------------------------------------------
+
+// Main render orchestrator — calculateAndRefresh() internally calls renderDashboard()
+function render() {
+    renderSubjectRows();
+    calculateAndRefresh();
+}
+
+// Render dynamic rows of the active semester
+function renderSubjectRows() {
+    const courses = state.semesters[state.activeSemester];
+    dom.subjectRowsContainer.innerHTML = '';
+
+    if (courses.length === 0) {
+        dom.emptyStateMessage.style.display = 'block';
+        dom.semOverviewPanel.style.display = 'none';
+        return;
+    }
+
+    dom.emptyStateMessage.style.display = 'none';
+    dom.semOverviewPanel.style.display = 'block';
+
+    const isGradeMode = state.calculationMethod === 'grade';
+
+    courses.forEach(course => {
+        const tr = document.createElement('tr');
+        tr.setAttribute('data-id', course.id);
+        tr.style.cursor = 'pointer';
+
+        if (isGradeMode) {
+            tr.innerHTML = `
+                <td data-label="Course" class="course-cell">
+                    <input type="text" class="input-code" placeholder="Course Code" value="${course.code}">
+                </td>
+                <td data-label="Type" class="type-cell">
+                    <select class="select-type">
+                        <option value="">Select Type</option>
+                        <option value="Theory" ${course.courseType === 'Theory' ? 'selected' : ''}>Theory</option>
+                        <option value="Other" ${course.courseType === 'Other' ? 'selected' : ''}>Other than Theory</option>
+                    </select>
+                </td>
+                <td data-label="Obtained" class="obtained-cell">
+                    <input type="number" step="any" class="input-marks input-obtained" placeholder="Obt" value="${course.obtainedMarks === null ? '' : course.obtainedMarks}">
+                </td>
+                <td data-label="Max" class="max-cell">
+                    <input type="number" step="any" class="input-marks input-max" placeholder="Max" value="${course.maximumMarks === null ? '' : course.maximumMarks}">
+                </td>
+                <td data-label="Credits" class="credits-cell">
+                    <input type="number" step="any" class="input-credits" placeholder="Cr" value="${course.credits === null ? '' : course.credits}">
+                </td>
+                <td data-label="Grade" class="grade-cell">
+                    <select class="select-grade">
+                        <option value="">Select Grade</option>
+                        <option value="AA" ${course.grade === 'AA' ? 'selected' : ''}>AA</option>
+                        <option value="AB" ${course.grade === 'AB' ? 'selected' : ''}>AB</option>
+                        <option value="BB" ${course.grade === 'BB' ? 'selected' : ''}>BB</option>
+                        <option value="BC" ${course.grade === 'BC' ? 'selected' : ''}>BC</option>
+                        <option value="CC" ${course.grade === 'CC' ? 'selected' : ''}>CC</option>
+                        <option value="CD" ${course.grade === 'CD' ? 'selected' : ''}>CD</option>
+                        <option value="DD" ${course.grade === 'DD' ? 'selected' : ''}>DD</option>
+                        <option value="F" ${course.grade === 'F' ? 'selected' : ''}>F</option>
+                        <option value="W" ${course.grade === 'W' ? 'selected' : ''}>W</option>
+                        <option value="PP" ${course.grade === 'PP' ? 'selected' : ''}>PP</option>
+                        <option value="NP" ${course.grade === 'NP' ? 'selected' : ''}>NP</option>
+                        <option value="AU" ${course.grade === 'AU' ? 'selected' : ''}>AU</option>
+                        <option value="Satisfactory" ${course.grade === 'Satisfactory' ? 'selected' : ''}>Satisfactory</option>
+                        <option value="Unsatisfactory" ${course.grade === 'Unsatisfactory' ? 'selected' : ''}>Unsatisfactory</option>
+                        <option value="I" ${course.grade === 'I' ? 'selected' : ''}>I</option>
+                    </select>
+                </td>
+                <td data-label="GP" class="gp-cell grade-point-display">—</td>
+                <td data-label="Status" class="status-cell" style="text-align: center;"><span class="status-text">Incomplete</span></td>
+                <td data-label="Action" class="remove-cell" style="text-align: center;">
+                    <button type="button" class="btn-remove" aria-label="Remove subject">&times;</button>
+                </td>
+            `;
+        } else {
+            tr.innerHTML = `
+                <td data-label="Course" class="course-cell">
+                    <input type="text" class="input-code" placeholder="Course Code" value="${course.code}">
+                </td>
+                <td data-label="Type" class="type-cell">
+                    <select class="select-type">
+                        <option value="">Select Course Type</option>
+                        <option value="Theory" ${course.courseType === 'Theory' ? 'selected' : ''}>Theory</option>
+                        <option value="Other" ${course.courseType === 'Other' ? 'selected' : ''}>Other than Theory</option>
+                    </select>
+                </td>
+                <td data-label="Obtained" class="obtained-cell">
+                    <input type="number" step="any" class="input-marks input-obtained" placeholder="Obtained" value="${course.obtainedMarks === null ? '' : course.obtainedMarks}">
+                </td>
+                <td data-label="Max" class="max-cell">
+                    <input type="number" step="any" class="input-marks input-max" placeholder="Max" value="${course.maximumMarks === null ? '' : course.maximumMarks}">
+                </td>
+                <td data-label="Credits" class="credits-cell">
+                    <input type="number" step="any" class="input-credits" placeholder="Credits" value="${course.credits === null ? '' : course.credits}">
+                </td>
+                <td data-label="Grade" class="grade-cell">
+                    <select class="select-grade" ${course.gradeSource === 'Calculated from Marks' ? 'disabled' : ''}>
+                        <option value="">Select Grade</option>
+                        <option value="AA" ${course.grade === 'AA' ? 'selected' : ''}>AA</option>
+                        <option value="AB" ${course.grade === 'AB' ? 'selected' : ''}>AB</option>
+                        <option value="BB" ${course.grade === 'BB' ? 'selected' : ''}>BB</option>
+                        <option value="BC" ${course.grade === 'BC' ? 'selected' : ''}>BC</option>
+                        <option value="CC" ${course.grade === 'CC' ? 'selected' : ''}>CC</option>
+                        <option value="CD" ${course.grade === 'CD' ? 'selected' : ''}>CD</option>
+                        <option value="DD" ${course.grade === 'DD' ? 'selected' : ''}>DD</option>
+                        <option value="F" ${course.grade === 'F' ? 'selected' : ''}>F</option>
+                        <option value="W" ${course.grade === 'W' ? 'selected' : ''}>W</option>
+                        <option value="PP" ${course.grade === 'PP' ? 'selected' : ''}>PP</option>
+                        <option value="NP" ${course.grade === 'NP' ? 'selected' : ''}>NP</option>
+                        <option value="AU" ${course.grade === 'AU' ? 'selected' : ''}>AU</option>
+                        <option value="Satisfactory" ${course.grade === 'Satisfactory' ? 'selected' : ''}>Satisfactory</option>
+                        <option value="Unsatisfactory" ${course.grade === 'Unsatisfactory' ? 'selected' : ''}>Unsatisfactory</option>
+                        <option value="I" ${course.grade === 'I' ? 'selected' : ''}>I</option>
+                    </select>
+                </td>
+                <td data-label="GP" class="gp-cell grade-point-display">—</td>
+                <td data-label="Status" class="status-cell" style="text-align: center;"><span class="status-text">Incomplete</span></td>
+                <td data-label="Action" class="remove-cell" style="text-align: center;">
+                    <button type="button" class="btn-remove">&times;</button>
+                </td>
+            `;
+        }
+
+        // Bind event listeners using selector queries to prevent layout/index mismatches
+        const inputCode = tr.querySelector('.input-code');
+        if (inputCode) {
+            inputCode.addEventListener('input', (e) => {
+                updateCourse(course.id, 'code', e.target.value);
+            });
+        }
+
+        const selectType = tr.querySelector('.select-type');
+        if (selectType) {
+            selectType.addEventListener('change', (e) => {
+                updateCourse(course.id, 'courseType', e.target.value);
+            });
+        }
+
+        const inputObtained = tr.querySelector('.input-obtained');
+        if (inputObtained) {
+            inputObtained.addEventListener('input', (e) => {
+                const val = e.target.value === '' ? null : parseFloat(e.target.value);
+                updateCourse(course.id, 'obtainedMarks', val);
+            });
+        }
+
+        const inputMax = tr.querySelector('.input-max');
+        if (inputMax) {
+            inputMax.addEventListener('input', (e) => {
+                const val = e.target.value === '' ? null : parseFloat(e.target.value);
+                updateCourse(course.id, 'maximumMarks', val);
+            });
+        }
+
+        const inputCredits = tr.querySelector('.input-credits');
+        if (inputCredits) {
+            inputCredits.addEventListener('input', (e) => {
+                const val = e.target.value === '' ? null : parseFloat(e.target.value);
+                updateCourse(course.id, 'credits', val);
+            });
+        }
+
+        const selectGrade = tr.querySelector('.select-grade');
+        if (selectGrade) {
+            selectGrade.addEventListener('change', (e) => {
+                updateCourse(course.id, 'grade', e.target.value);
+            });
+        }
+
+        const btnRemove = tr.querySelector('.btn-remove');
+        if (btnRemove) {
+            btnRemove.addEventListener('click', (e) => {
+                e.stopPropagation();
+                removeSubject(course.id);
+            });
+        }
+
+        tr.addEventListener('click', (e) => {
+            if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON' && !e.target.classList.contains('btn-remove')) {
+                openSubjectDetailModal(course.id);
+            }
+        });
+
+        dom.subjectRowsContainer.appendChild(tr);
+        updateRowDOM(course.id);
+    });
+}
+
+// Add Subject Row
+function addSubject(semId) {
+    const newCourse = {
+        id: 'course_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        code: '',
+        courseType: '', 
+        obtainedMarks: null,
+        maximumMarks: null,
+        credits: null,
+        grade: '',
+        gradeSource: '', 
+        manualGrade: '', 
+        attemptType: 'original', 
+        parentCourseId: '',
+        documentType: '',
+        source: 'manual',
+        confidence: {}
+    };
+    state.semesters[semId].push(newCourse);
+    render();
+}
+
+// Remove Subject Row
+function removeSubject(courseId) {
+    const courses = state.semesters[state.activeSemester];
+    state.semesters[state.activeSemester] = courses.filter(c => c.id !== courseId);
+    render();
+}
+
+// Update values in courses
+function updateCourse(courseId, field, value) {
+    const course = state.semesters[state.activeSemester].find(c => c.id === courseId);
+    if (course) {
+        course[field] = value;
+        if (field === 'grade') {
+            course.manualGrade = value;
+        }
+        recalculateCourseGrade(course);
+        updateRowDOM(courseId);
+        calculateAndRefresh();
+    }
+}
+
+// Recalculate dynamic grade values based on marks completeness and manual grades
+function recalculateCourseGrade(course) {
+    if (course.source === 'imported' || course.source === 'document') {
+        return; // Do not overwrite imported grades
+    }
+
+    if (state.calculationMethod === 'marks') {
+        const hasType = course.courseType !== '';
+        const hasObtained = course.obtainedMarks !== null && !isNaN(course.obtainedMarks);
+        const hasMax = course.maximumMarks !== null && !isNaN(course.maximumMarks);
+
+        if (hasType && hasObtained && hasMax) {
+            const calc = calculateGradeFromMarks(course.courseType, course.obtainedMarks, course.maximumMarks);
+            if (calc && !calc.error) {
+                course.grade = calc.grade;
+                course.gradeSource = 'Calculated from Marks';
+                return;
+            }
+        }
+    }
+
+    if (course.manualGrade !== '') {
+        course.grade = course.manualGrade;
+        course.gradeSource = 'Manual Grade';
+    } else {
+        course.grade = '';
+        course.gradeSource = '';
+    }
+}
+
+// Helper calculation mapping for obtained marks
+function calculateGradeFromMarks(courseType, obtained, max) {
+    if (courseType === '' || obtained === null || max === null) {
+        return null;
+    }
+    if (obtained < 0 || max <= 0 || obtained > max) {
+        return { error: 'Obtained marks cannot be greater than maximum marks.' };
+    }
+
+    const normalized = (obtained / max) * 100;
+    const rounded = Math.round(normalized);
+
+    let grade = 'F';
+    let gp = 0;
+
+    if (courseType === 'Theory') {
+        const match = THEORY_GRADING.find(r => rounded >= r.min && rounded <= r.max);
+        if (match) {
+            grade = match.grade;
+            gp = match.gp;
+        }
+    } else if (courseType === 'Other') {
+        const match = OTHER_GRADING.find(r => rounded >= r.min && rounded <= r.max);
+        if (match) {
+            grade = match.grade;
+            gp = match.gp;
+        }
+    }
+
+    return {
+        normalized: normalized.toFixed(2),
+        rounded,
+        grade,
+        gp
+    };
+}
+
+// Update specific row's warning messages and grade point dynamically in the DOM
+function updateRowDOM(courseId) {
+    const course = state.semesters[state.activeSemester].find(c => c.id === courseId);
+    if (!course) return;
+
+    const tr = document.querySelector(`tr[data-id="${courseId}"]`);
+    if (!tr) return;
+
+    // 1. Course Code Warning
+    const tdCode = tr.querySelector('.course-cell');
+    if (tdCode) {
+        let codeWarn = tdCode.querySelector('.validation-warning');
+        if (course.code.trim() === '') {
+            if (!codeWarn) {
+                codeWarn = document.createElement('span');
+                codeWarn.className = 'validation-warning';
+                codeWarn.textContent = 'Course identification recommended.';
+                tdCode.appendChild(codeWarn);
+            }
+        } else {
+            if (codeWarn) codeWarn.remove();
+        }
+    }
+
+    // 2. Course Type Warning (only in Marks mode)
+    const tdType = tr.querySelector('.type-cell');
+    if (tdType) {
+        let typeWarn = tdType.querySelector('.validation-warning');
+        const hasObtained = course.obtainedMarks !== null && !isNaN(course.obtainedMarks);
+        const hasMax = course.maximumMarks !== null && !isNaN(course.maximumMarks);
+        if (course.courseType === '' && (hasObtained || hasMax)) {
+            if (!typeWarn) {
+                typeWarn = document.createElement('span');
+                typeWarn.className = 'validation-warning';
+                typeWarn.textContent = 'Select course type to calculate.';
+                tdType.appendChild(typeWarn);
+            }
+        } else {
+            if (typeWarn) typeWarn.remove();
+        }
+    }
+
+    // 3. Obtained Marks Warning & Subtext (only in Marks mode)
+    const tdObtained = tr.querySelector('.obtained-cell');
+    if (tdObtained) {
+        let obtainedWarn = tdObtained.querySelector('.validation-warning');
+        let subtext = tdObtained.querySelector('.normalized-subtext');
+
+        if (course.obtainedMarks !== null && course.obtainedMarks < 0) {
+            if (!obtainedWarn) {
+                obtainedWarn = document.createElement('span');
+                obtainedWarn.className = 'validation-warning';
+                tdObtained.appendChild(obtainedWarn);
+            }
+            obtainedWarn.textContent = 'Obtained marks cannot be negative.';
+        } else if (course.obtainedMarks !== null && course.maximumMarks !== null && course.obtainedMarks > course.maximumMarks) {
+            if (!obtainedWarn) {
+                obtainedWarn = document.createElement('span');
+                obtainedWarn.className = 'validation-warning';
+                tdObtained.appendChild(obtainedWarn);
+            }
+            obtainedWarn.textContent = 'Obtained marks cannot exceed max marks.';
+        } else {
+            if (obtainedWarn) obtainedWarn.remove();
+        }
+
+        const calc = calculateGradeFromMarks(course.courseType, course.obtainedMarks, course.maximumMarks);
+        if (calc && !calc.error) {
+            if (!subtext) {
+                subtext = document.createElement('span');
+                subtext.className = 'normalized-subtext';
+                tdObtained.appendChild(subtext);
+            }
+            subtext.innerHTML = `Raw: ${calc.normalized} | Round: ${calc.rounded}`;
+        } else {
+            if (subtext) subtext.remove();
+        }
+    }
+
+    // 4. Maximum Marks Warning (only in Marks mode)
+    const tdMax = tr.querySelector('.max-cell');
+    if (tdMax) {
+        let maxWarn = tdMax.querySelector('.validation-warning');
+        if (course.maximumMarks !== null && course.maximumMarks <= 0) {
+            if (!maxWarn) {
+                maxWarn = document.createElement('span');
+                maxWarn.className = 'validation-warning';
+                tdMax.appendChild(maxWarn);
+            }
+            maxWarn.textContent = 'Maximum marks must be greater than 0.';
+        } else if (course.obtainedMarks !== null && course.maximumMarks === null) {
+            if (!maxWarn) {
+                maxWarn = document.createElement('span');
+                maxWarn.className = 'validation-warning';
+                tdMax.appendChild(maxWarn);
+            }
+            maxWarn.textContent = 'Enter max marks.';
+        } else if (course.obtainedMarks === null && course.maximumMarks !== null) {
+            if (!maxWarn) {
+                maxWarn = document.createElement('span');
+                maxWarn.className = 'validation-warning';
+                tdMax.appendChild(maxWarn);
+            }
+            maxWarn.textContent = 'Enter obtained marks.';
+        } else {
+            if (maxWarn) maxWarn.remove();
+        }
+    }
+
+    // 5. Credits Warning
+    const tdCredits = tr.querySelector('.credits-cell');
+    if (tdCredits) {
+        let creditsWarn = tdCredits.querySelector('.validation-warning');
+        if (course.credits !== null && course.credits <= 0) {
+            if (!creditsWarn) {
+                creditsWarn = document.createElement('span');
+                creditsWarn.className = 'validation-warning';
+                creditsWarn.textContent = 'Credits must be greater than 0.';
+                tdCredits.appendChild(creditsWarn);
+            }
+        } else if (course.credits === null) {
+            if (!creditsWarn) {
+                creditsWarn = document.createElement('span');
+                creditsWarn.className = 'validation-warning';
+                creditsWarn.textContent = 'Credits must be greater than 0.';
+                tdCredits.appendChild(creditsWarn);
+            }
+        } else {
+            if (creditsWarn) creditsWarn.remove();
+        }
+    }
+
+    // 6. Grade Warning
+    const tdGrade = tr.querySelector('.grade-cell');
+    if (tdGrade) {
+        let gradeWarn = tdGrade.querySelector('.validation-warning');
+        const selectGrade = tdGrade.querySelector('.select-grade');
+        if (selectGrade) {
+            selectGrade.value = course.grade;
+        }
+
+        const isCreditsEmptyOrInvalid = course.credits === null || isNaN(course.credits) || course.credits <= 0;
+        const isGradeEmpty = course.grade === '';
+
+        if (isCreditsEmptyOrInvalid || isGradeEmpty) {
+            if (!gradeWarn) {
+                gradeWarn = document.createElement('span');
+                gradeWarn.className = 'validation-warning';
+                tdGrade.appendChild(gradeWarn);
+            }
+            if (state.calculationMethod === 'grade') {
+                gradeWarn.textContent = 'Enter credits and grade.';
+            } else {
+                gradeWarn.textContent = 'Enter type, marks and credits.';
+            }
+        } else {
+            if (gradeWarn) gradeWarn.remove();
+        }
+    }
+
+    // 7. Grade Point
+    const tdGp = tr.querySelector('.gp-cell');
+    if (tdGp) {
+        if (course.grade !== '') {
+            tdGp.textContent = GRADE_POINT_MAPPING[course.grade];
+        } else {
+            tdGp.textContent = '—';
+        }
+    }
+
+    // 8. Status
+    const tdStatus = tr.querySelector('.status-cell');
+    if (tdStatus) {
+        let statusSpan = tdStatus.querySelector('.status-text');
+        if (!statusSpan) {
+            statusSpan = document.createElement('span');
+            statusSpan.className = 'status-text';
+            tdStatus.appendChild(statusSpan);
+        }
+        statusSpan.className = 'status-text';
+        
+        const isCreditsEmptyOrInvalid = course.credits === null || isNaN(course.credits) || course.credits <= 0;
+        const isGradeEmpty = course.grade === '';
+
+        if (isCreditsEmptyOrInvalid || isGradeEmpty) {
+            statusSpan.textContent = 'Incomplete';
+            statusSpan.classList.add('status-text-incomplete');
+        } else {
+            // Find resolved final status for this course in dataset
+            const resolvedCourse = state.resolvedFinalDataset ? state.resolvedFinalDataset.find(rc => rc.id === course.id) : null;
+            if (resolvedCourse) {
+                if (resolvedCourse.status === 'cleared') {
+                    statusSpan.textContent = 'Cleared';
+                    statusSpan.className = 'status-text status-text-passed';
+                } else if (resolvedCourse.status === 'improved') {
+                    statusSpan.textContent = 'Improved';
+                    statusSpan.className = 'status-text status-text-passed';
+                } else if (resolvedCourse.status === 'backlog') {
+                    statusSpan.textContent = resolvedCourse.grade === 'W' ? 'Fail / Attendance' : 'Backlog';
+                    statusSpan.className = 'status-text status-text-backlog';
+                } else if (resolvedCourse.status === 'withdrawn') {
+                    statusSpan.textContent = 'Fail / Attendance';
+                    statusSpan.className = 'status-text status-text-backlog';
+                } else {
+                    if (resolvedCourse.grade === 'PP') {
+                        statusSpan.textContent = 'Passed';
+                        statusSpan.className = 'status-text status-text-passed';
+                    } else if (resolvedCourse.grade === 'NP') {
+                        statusSpan.textContent = 'Not Passed';
+                        statusSpan.className = 'status-text status-text-backlog';
+                    } else if (resolvedCourse.grade === 'AU') {
+                        statusSpan.textContent = 'Audit';
+                        statusSpan.className = 'status-text status-text-withdrawn';
+                    } else if (resolvedCourse.grade === 'Satisfactory') {
+                        statusSpan.textContent = 'Satisfactory';
+                        statusSpan.className = 'status-text status-text-passed';
+                    } else if (resolvedCourse.grade === 'Unsatisfactory') {
+                        statusSpan.textContent = 'Unsatisfactory';
+                        statusSpan.className = 'status-text status-text-backlog';
+                    } else if (resolvedCourse.grade === 'I') {
+                        statusSpan.textContent = 'Incomplete';
+                        statusSpan.className = 'status-text status-text-incomplete';
+                    } else {
+                        statusSpan.textContent = 'Passed';
+                        statusSpan.className = 'status-text status-text-passed';
+                    }
+                }
+            } else {
+                if (course.grade === 'F') {
+                    statusSpan.textContent = 'Backlog';
+                    statusSpan.className = 'status-text status-text-backlog';
+                } else if (course.grade === 'W') {
+                    statusSpan.textContent = 'Fail / Attendance';
+                    statusSpan.className = 'status-text status-text-backlog';
+                } else if (course.grade === 'PP') {
+                    statusSpan.textContent = 'Passed';
+                    statusSpan.className = 'status-text status-text-passed';
+                } else if (course.grade === 'NP') {
+                    statusSpan.textContent = 'Not Passed';
+                    statusSpan.className = 'status-text status-text-backlog';
+                } else if (course.grade === 'AU') {
+                    statusSpan.textContent = 'Audit';
+                    statusSpan.className = 'status-text status-text-withdrawn';
+                } else if (course.grade === 'Satisfactory') {
+                    statusSpan.textContent = 'Satisfactory';
+                    statusSpan.className = 'status-text status-text-passed';
+                } else if (course.grade === 'Unsatisfactory') {
+                    statusSpan.textContent = 'Unsatisfactory';
+                    statusSpan.className = 'status-text status-text-backlog';
+                } else if (course.grade === 'I') {
+                    statusSpan.textContent = 'Incomplete';
+                    statusSpan.className = 'status-text status-text-incomplete';
+                } else {
+                    statusSpan.textContent = 'Passed';
+                    statusSpan.className = 'status-text status-text-passed';
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// CALCULATIONS & RESULTS HANDLERS
+// -------------------------------------------------------------
+
+// Compute calculations and push updates to cards & sidebar summary
+function calculateAndRefresh() {
+    // 0. Resolve attempts chains and compile applicable dataset
+    buildAttemptHistories();
+
+    // 1. Current Active Semester calculation
+    const currentSemData = calculateSemester(state.activeSemester);
+    updateActiveSemesterPanel(currentSemData);
+
+    // 2. Overall Cumulative calculation (ALL semesters combined — single source of truth)
+    const overallData = calculateCombined(['sem1', 'sem2', 'sem3', 'sem4']);
+    updateOverallCards(overallData, currentSemData);
+
+    // 3. Selected Semesters calculation (based on checkboxes)
+    const selectedSemsList = Object.keys(state.selectedSemesters).filter(sem => state.selectedSemesters[sem] === true);
+    const selectedData = calculateCombined(selectedSemsList);
+    updateSelectedCards(selectedData);
+
+    // 4. Render Sidebar Semester Summary grid
+    renderSemesterSummaryTable();
+
+    // 5. Render repeated attempts link warning indicators and accordion rows
+    renderLinkWarnings();
+    renderAttemptHistoryTable();
+
+    // 6. Sync Academic Analysis Dashboard — must always reflect current state
+    renderDashboard();
+}
+
+// Calculate individual semester data using final resolved dataset
+function calculateSemester(semId) {
+    const courses = state.semesters[semId] || [];
+    let totalCredits = 0;
+    let sumWeight = 0;
+    let backlogs = 0;
+
+    const validCourses = courses.filter(c => c.credits !== null && c.credits > 0 && c.grade !== '');
+    const nonGpa = ['PP', 'NP', 'AU', 'Satisfactory', 'Unsatisfactory', 'I'];
+    const gpaCourses = validCourses.filter(c => !nonGpa.includes(c.grade));
+
+    gpaCourses.forEach(c => {
+        totalCredits += c.credits;
+        const gp = GRADE_POINT_MAPPING[c.grade] || 0;
+        sumWeight += (c.credits * gp);
+    });
+
+    validCourses.forEach(c => {
+        if (c.grade === 'F' || c.grade === 'W') {
+            backlogs++;
+        }
+    });
+
+    const sgpa = totalCredits > 0 ? (sumWeight / totalCredits) : null;
+    const percentage = sgpa !== null ? (sgpa * 10) : null;
+
+    let status = '—';
+    if (validCourses.length > 0) {
+        status = backlogs > 0 ? 'Backlog' : 'Passed';
+    }
+
+    return {
+        totalCredits,
+        totalGradePoints: sumWeight,
+        sgpa,
+        percentage,
+        backlogs,
+        status,
+        hasData: state.semesters[semId].length > 0,
+        hasValidData: validCourses.length > 0
+    };
+}
+
+// Calculate credit-weighted combined performance across selected semesters using final resolved dataset
+function calculateCombined(semesterKeys) {
+    if (semesterKeys.length === 0) {
+        return {
+            cgpa: null,
+            percentage: null,
+            totalCredits: 0,
+            backlogs: 0,
+            hasValidData: false
+        };
+    }
+
+    let totalCredits = 0;
+    let sumWeight = 0;
+    let totalBacklogs = 0;
+    let hasValidData = false;
+
+    semesterKeys.forEach(semKey => {
+        const courses = state.semesters[semKey] || [];
+        const validCourses = courses.filter(c => c.credits !== null && c.credits > 0 && c.grade !== '');
+        const nonGpa = ['PP', 'NP', 'AU', 'Satisfactory', 'Unsatisfactory', 'I'];
+        const gpaCourses = validCourses.filter(c => !nonGpa.includes(c.grade));
+
+        gpaCourses.forEach(c => {
+            totalCredits += c.credits;
+            const gp = GRADE_POINT_MAPPING[c.grade] || 0;
+            sumWeight += (c.credits * gp);
+            hasValidData = true;
+        });
+
+        validCourses.forEach(c => {
+            if (c.grade === 'F' || c.grade === 'W') {
+                totalBacklogs++;
+            }
+        });
+    });
+
+    const cgpa = totalCredits > 0 ? (sumWeight / totalCredits) : null;
+    const percentage = cgpa !== null ? (cgpa * 10) : null;
+
+    return {
+        cgpa,
+        percentage,
+        totalCredits,
+        backlogs: totalBacklogs,
+        hasValidData
+    };
+}
+
+// -------------------------------------------------------------
+// DOM UPDATER HELPERS
+// -------------------------------------------------------------
+
+// Update the quick summary calculations at the bottom of the active calculator card
+function updateActiveSemesterPanel(data) {
+    if (!data.hasData) {
+        dom.semOverviewPanel.style.display = 'none';
+        return;
+    }
+    
+    dom.semOverviewPanel.style.display = 'block';
+    dom.overviewCredits.textContent = data.totalCredits % 1 === 0 ? data.totalCredits : data.totalCredits.toFixed(2);
+    dom.overviewPoints.textContent = data.totalGradePoints % 1 === 0 ? data.totalGradePoints : data.totalGradePoints.toFixed(2);
+    dom.overviewSgpa.textContent = data.sgpa !== null ? data.sgpa.toFixed(2) : '—';
+    dom.overviewPercentage.textContent = data.percentage !== null ? data.percentage.toFixed(2) + '%' : '—';
+}
+
+// Update the Dashboard result cards with overall & current values including attempts metrics
+function updateOverallCards(overallData, currentSemData) {
+    const semName = state.activeSemester.toUpperCase().replace('SEM', 'Semester ');
+    dom.currentSemTitle.textContent = semName;
+    dom.statusSemTitle.textContent = semName;
+
+    // Current SGPA Card
+    if (currentSemData.sgpa !== null) {
+        dom.cardCurrentSgpa.textContent = currentSemData.sgpa.toFixed(2);
+        if (state.importedDocSgpa !== null && state.importedDocSgpa !== undefined && !isNaN(state.importedDocSgpa)) {
+            const isMatch = Math.abs(state.importedDocSgpa - currentSemData.sgpa) < 0.005;
+            const matchText = isMatch ? '✓ Matches document' : `⚠ Does not match document (Doc: ${state.importedDocSgpa.toFixed(2)})`;
+            dom.currentSgpaPct.textContent = `${currentSemData.percentage.toFixed(2)}% | ${matchText}`;
+        } else {
+            dom.currentSgpaPct.textContent = currentSemData.percentage.toFixed(2) + '%';
+        }
+    } else {
+        dom.cardCurrentSgpa.textContent = '—';
+        dom.currentSgpaPct.textContent = '—';
+    }
+
+    // Overall CGPA Card
+    if (overallData.cgpa !== null) {
+        dom.cardOverallCgpa.textContent = overallData.cgpa.toFixed(2);
+        if (state.importedDocCgpa !== null && state.importedDocCgpa !== undefined && !isNaN(state.importedDocCgpa)) {
+            const isMatch = Math.abs(state.importedDocCgpa - overallData.cgpa) < 0.005;
+            const matchText = isMatch ? '✓ Matches document' : `⚠ Does not match document (Doc: ${state.importedDocCgpa.toFixed(2)})`;
+            dom.overallCgpaPct.textContent = `${overallData.percentage.toFixed(2)}% | ${matchText}`;
+        } else {
+            dom.overallCgpaPct.textContent = overallData.percentage.toFixed(2) + '%';
+        }
+    } else {
+        dom.cardOverallCgpa.textContent = '—';
+        dom.overallCgpaPct.textContent = '—';
+    }
+
+    // Total Credits Card (Across all entered semesters)
+    dom.cardTotalCredits.textContent = overallData.totalCredits > 0 
+        ? (overallData.totalCredits % 1 === 0 ? overallData.totalCredits : overallData.totalCredits.toFixed(2)) 
+        : '—';
+
+    // Percentage Card (new top-row card)
+    if (dom.cardPercentage) {
+        dom.cardPercentage.textContent = overallData.percentage !== null 
+            ? overallData.percentage.toFixed(2) + '%' 
+            : '—';
+    }
+
+    // Gather raw courses list and resolved list
+    const rawCourses = [];
+    Object.keys(state.semesters).forEach(semKey => {
+        rawCourses.push(...state.semesters[semKey]);
+    });
+
+    const resolvedCourses = state.resolvedFinalDataset || [];
+    const hasAnyCourses = rawCourses.length > 0;
+
+    const domActiveBacklogs = document.getElementById('card-active-backlogs');
+    const domActiveBacklogsFooter = document.getElementById('card-active-backlogs-footer');
+    const domClearedBacklogs = document.getElementById('card-cleared-backlogs');
+    const domSuppAttempts = document.getElementById('card-supp-attempts');
+    const domReexamAttempts = document.getElementById('card-reexam-attempts');
+    const domImproveAttempts = document.getElementById('card-improve-attempts');
+    const domWithdrawnCourses = document.getElementById('card-withdrawn-courses');
+
+    if (!hasAnyCourses) {
+        if (domActiveBacklogs) domActiveBacklogs.textContent = '—';
+        if (domActiveBacklogsFooter) {
+            domActiveBacklogsFooter.textContent = 'No courses evaluated yet.';
+            domActiveBacklogsFooter.style.color = 'var(--text-muted)';
+        }
+        if (domClearedBacklogs) domClearedBacklogs.textContent = '—';
+        if (domSuppAttempts) domSuppAttempts.textContent = '—';
+        if (domReexamAttempts) domReexamAttempts.textContent = '—';
+        if (domImproveAttempts) domImproveAttempts.textContent = '—';
+        if (domWithdrawnCourses) domWithdrawnCourses.textContent = '—';
+    } else {
+        // Active Backlogs: resolved courses with F or W grade
+        const activeBacklogs = resolvedCourses.filter(c => c.grade === 'F' || c.grade === 'W').length;
+        if (domActiveBacklogs) domActiveBacklogs.textContent = activeBacklogs;
+        if (domActiveBacklogsFooter) {
+            if (activeBacklogs > 0) {
+                domActiveBacklogsFooter.textContent = `${activeBacklogs} unresolved backlog course(s)`;
+                domActiveBacklogsFooter.style.color = 'var(--danger)';
+            } else {
+                domActiveBacklogsFooter.textContent = 'All cleared. No active backlogs.';
+                domActiveBacklogsFooter.style.color = 'var(--success)';
+            }
+        }
+
+        // Cleared Backlogs: resolved status cleared
+        const clearedBacklogs = resolvedCourses.filter(c => c.status === 'cleared').length;
+        if (domClearedBacklogs) domClearedBacklogs.textContent = clearedBacklogs > 0 ? clearedBacklogs : 'No records';
+
+        // Supplementary: count in raw courses
+        const suppAttempts = rawCourses.filter(c => c.attemptType === 'supplementary').length;
+        if (domSuppAttempts) domSuppAttempts.textContent = suppAttempts > 0 ? suppAttempts : 'No records';
+
+        // Re-examinations: count in raw courses
+        const reexamAttempts = rawCourses.filter(c => c.attemptType === 're-examination').length;
+        if (domReexamAttempts) domReexamAttempts.textContent = reexamAttempts > 0 ? reexamAttempts : 'No records';
+
+        // Improvements: count in raw courses
+        const improveAttempts = rawCourses.filter(c => c.attemptType === 'improvement').length;
+        if (domImproveAttempts) domImproveAttempts.textContent = improveAttempts > 0 ? improveAttempts : 'No records';
+
+        // Withdrawn: resolved W grades
+        const withdrawnCourses = resolvedCourses.filter(c => c.grade === 'W').length;
+        if (domWithdrawnCourses) domWithdrawnCourses.textContent = withdrawnCourses > 0 ? withdrawnCourses : 'No records';
+    }
+}
+
+// Update custom selection result cards
+function updateSelectedCards(selectedData) {
+    const selectedCreditsEl = document.getElementById('selected-credits');
+    if (selectedData.cgpa !== null) {
+        dom.cardSelectedCgpa.textContent = selectedData.cgpa.toFixed(2);
+        dom.selectedCgpaPct.textContent = selectedData.percentage.toFixed(2) + '%';
+        if (selectedCreditsEl) {
+            selectedCreditsEl.textContent = selectedData.totalCredits % 1 === 0 ? selectedData.totalCredits : selectedData.totalCredits.toFixed(2);
+        }
+    } else {
+        dom.cardSelectedCgpa.textContent = '—';
+        dom.selectedCgpaPct.textContent = '—';
+        if (selectedCreditsEl) {
+            selectedCreditsEl.textContent = '—';
+        }
+    }
+}
+
+// Render dynamic semester summaries on the sidebar
+function renderSemesterSummaryTable() {
+    dom.summaryRowsContainer.innerHTML = '';
+    let hasSummaryData = false;
+
+    for (let i = 1; i <= 4; i++) {
+        const semKey = 'sem' + i;
+        const semName = 'Semester ' + i;
+        const semData = calculateSemester(semKey);
+
+        if (semData.hasData) {
+            hasSummaryData = true;
+            const tr = document.createElement('tr');
+            
+            // Name
+            const tdName = document.createElement('td');
+            tdName.textContent = semName;
+            tr.appendChild(tdName);
+
+            // Credits
+            const tdCredits = document.createElement('td');
+            tdCredits.textContent = semData.totalCredits % 1 === 0 ? semData.totalCredits : semData.totalCredits.toFixed(2);
+            tr.appendChild(tdCredits);
+
+            // SGPA
+            const tdSgpa = document.createElement('td');
+            tdSgpa.textContent = semData.sgpa !== null ? semData.sgpa.toFixed(2) : '—';
+            tr.appendChild(tdSgpa);
+
+            // Backlogs
+            const tdBack = document.createElement('td');
+            tdBack.textContent = semData.backlogs;
+            tr.appendChild(tdBack);
+
+            // Status Badge
+            const tdStatus = document.createElement('td');
+            const statusSpan = document.createElement('span');
+            
+            if (semData.hasValidData) {
+                statusSpan.className = semData.status === 'Passed' ? 'status-badge status-passed' : 'status-badge status-backlog';
+                statusSpan.textContent = semData.status;
+            } else {
+                statusSpan.className = 'status-badge';
+                statusSpan.style.backgroundColor = 'var(--neutral-light)';
+                statusSpan.style.color = 'var(--text-muted)';
+                statusSpan.textContent = 'Incomplete';
+            }
+            tdStatus.appendChild(statusSpan);
+            tr.appendChild(tdStatus);
+
+            dom.summaryRowsContainer.appendChild(tr);
+        }
+    }
+
+    if (hasSummaryData) {
+        dom.summaryEmptyMessage.style.display = 'none';
+    } else {
+        dom.summaryEmptyMessage.style.display = 'block';
+    }
+    const summaryTable = document.querySelector('.summary-table');
+    if (summaryTable) {
+        summaryTable.style.display = hasSummaryData ? 'table' : 'none';
+    }
+}
+
+// -------------------------------------------------------------
+// CHECKBOX SELECTION HELPERS
+// -------------------------------------------------------------
+
+// Select or clear all checkbox values for custom analysis
+function setAllCheckboxes(checkedState) {
+    Object.keys(state.selectedSemesters).forEach(key => {
+        state.selectedSemesters[key] = checkedState;
+    });
+
+    dom.checkSem1.checked = checkedState;
+    dom.checkSem2.checked = checkedState;
+    dom.checkSem3.checked = checkedState;
+    dom.checkSem4.checked = checkedState;
+
+    calculateAndRefresh();
+}
+
+// -------------------------------------------------------------
+// RESET ACTIONS
+// -------------------------------------------------------------
+
+// Completely reset state
+function resetCalculator() {
+    // Reset calculation method
+    state.calculationMethod = 'grade';
+    const gradeRadio = document.querySelector('input[name="calc-method"][value="grade"]');
+    if (gradeRadio) gradeRadio.checked = true;
+    toggleCalculatorMode();
+
+    // Reset semesters course lists
+    state.semesters.sem1 = [];
+    state.semesters.sem2 = [];
+    state.semesters.sem3 = [];
+    state.semesters.sem4 = [];
+
+    // Reset checkbox selections
+    state.selectedSemesters.sem1 = false;
+    state.selectedSemesters.sem2 = false;
+    state.selectedSemesters.sem3 = false;
+    state.selectedSemesters.sem4 = false;
+
+    // Reset imported metrics
+    state.importedDocSgpa = null;
+    state.importedDocCgpa = null;
+
+    // Reset attempt links and history
+    state.attemptHistories = [];
+    state.resolvedFinalDataset = [];
+    state.unlinkedRepeats = [];
+    state.ignoredRepeats = [];
+
+    // Reset extraction session
+    state.extractionSession.file = null;
+    state.extractionSession.status = 'empty';
+    state.extractionSession.extractedSubjects = [];
+    dom.fileInput.value = '';
+    showExtractionState();
+
+    // Reset DOM inputs
+    dom.checkSem1.checked = false;
+    dom.checkSem2.checked = false;
+    dom.checkSem3.checked = false;
+    dom.checkSem4.checked = false;
+
+    // Reset Dashboard filters
+    if (dom.filterSemester) dom.filterSemester.value = 'all';
+    if (dom.filterStatus) dom.filterStatus.value = 'all';
+    if (dom.filterGrade) dom.filterGrade.value = 'all';
+
+    // Reset to sem1 active view
+    state.activeSemester = 'sem1';
+    
+    // Set tabs visually
+    document.querySelectorAll('.sem-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.getElementById('tab-sem1').classList.add('active');
+
+    // Full UI redraw
+    render();
+}
+
+// ==============================================================
+// PART 3: RESULT ANALYZER LOGIC
+// ==============================================================
+
+// File Drag and Drop Event Listeners
+function initAnalyzerEvents() {
+    // Drag & Drop hover effects
+    dom.uploadDropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dom.uploadDropzone.classList.add('drag-over');
+    });
+
+    dom.uploadDropzone.addEventListener('dragleave', () => {
+        dom.uploadDropzone.classList.remove('drag-over');
+    });
+
+    dom.uploadDropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dom.uploadDropzone.classList.remove('drag-over');
+        if (e.dataTransfer.files.length > 0) {
+            handleFileSelection(e.dataTransfer.files[0]);
+        }
+    });
+
+    // File selection via browsing
+    dom.uploadDropzone.addEventListener('click', () => {
+        dom.fileInput.click();
+    });
+
+    dom.fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleFileSelection(e.target.files[0]);
+        }
+    });
+
+    // Remove file selection
+    dom.removeFileBtn.addEventListener('click', () => {
+        removeUploadedFile();
+    });
+
+    // Analyze document trigger
+    dom.analyzeBtn.addEventListener('click', () => {
+        analyzeDocument();
+    });
+
+    // Verification row operations
+    dom.addVerificationRowBtn.addEventListener('click', () => {
+        addExtractedSubject();
+    });
+
+    // Confirm import into calculator
+    dom.confirmImportBtn.addEventListener('click', () => {
+        confirmImport();
+    });
+
+    // Cancel extraction session
+    dom.cancelExtractionBtn.addEventListener('click', () => {
+        cancelExtraction();
+    });
+
+    // Document comparison updates
+    dom.docSgpaInput.addEventListener('input', () => {
+        calculateVerificationMetrics();
+    });
+    dom.docCgpaInput.addEventListener('input', () => {
+        calculateVerificationMetrics();
+    });
+
+    // Conflict resolution modal buttons
+    dom.dupKeepExisting.addEventListener('click', () => {
+        resolveDuplicate('keep');
+    });
+    dom.dupUseUploaded.addEventListener('click', () => {
+        resolveDuplicate('overwrite');
+    });
+    dom.dupAddSeparate.addEventListener('click', () => {
+        resolveDuplicate('separate');
+    });
+}
+
+// Handle File upload validations
+function handleFileSelection(file) {
+    if (!file) return;
+
+    // Validate size (10 MB)
+    if (file.size > 10 * 1024 * 1024) {
+        showToast("File is too large. Maximum allowed size is 10 MB.", "error");
+        dom.fileInput.value = '';
+        return;
+    }
+
+    // Validate type (.pdf, .jpg, .jpeg, .png)
+    const validExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
+    const fileNameLower = file.name.toLowerCase();
+    const isValidExtension = validExtensions.some(ext => fileNameLower.endsWith(ext));
+    
+    if (!isValidExtension) {
+        showToast("Unsupported file type.", "error");
+        dom.fileInput.value = '';
+        return;
+    }
+
+    state.extractionSession.file = file;
+    state.extractionSession.status = 'selected';
+    state.extractionSession.extractedSubjects = [];
+
+    // Set preview text
+    dom.previewFilename.textContent = file.name;
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+    dom.previewFilesize.textContent = `${sizeMB} MB`;
+
+    // Show PDF vs Image graphics
+    if (file.type === 'application/pdf' || fileNameLower.endsWith('.pdf')) {
+        dom.previewIconType.textContent = '📄';
+        dom.pdfPreviewPlaceholder.style.display = 'block';
+        dom.imagePreviewWrapper.style.display = 'none';
+    } else {
+        dom.previewIconType.textContent = '🖼️';
+        dom.pdfPreviewPlaceholder.style.display = 'none';
+        dom.imagePreviewWrapper.style.display = 'block';
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            dom.previewImage.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    showExtractionState();
+}
+
+// Clear currently selected document
+function removeUploadedFile() {
+    state.extractionSession.file = null;
+    state.extractionSession.status = 'empty';
+    state.extractionSession.extractedSubjects = [];
+    dom.fileInput.value = '';
+    showExtractionState();
+}
+
+// Toggle layout components based on extraction status
+function showExtractionState() {
+    const status = state.extractionSession.status;
+    
+    dom.uploadDropzone.style.display = status === 'empty' ? 'flex' : 'none';
+    dom.previewPanel.style.display = status === 'selected' ? 'flex' : 'none';
+    dom.processingPanel.style.display = status === 'processing' ? 'flex' : 'none';
+    dom.verificationPanel.style.display = status === 'extracted' ? 'block' : 'none';
+}
+
+// Call real document analysis API and transition states
+function analyzeDocument() {
+    if (!state.extractionSession.file) return;
+
+    state.extractionSession.status = 'processing';
+    showExtractionState();
+
+    dom.analyzeBtn.disabled = true;
+
+    const formData = new FormData();
+    formData.append('document', state.extractionSession.file);
+
+    fetch('/api/analyze', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(errData => {
+                throw new Error(errData.error || 'Server error occurred during document analysis.');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            state.extractionSession.status = 'extracted';
+            showExtractionState();
+
+            // Display file-level warning alerts (e.g. supplementary alert)
+            const warnings = data.warnings || [];
+            if (warnings.length > 0) {
+                showToast(warnings.join(' | '), "warning");
+            }
+
+            state.extractionSession.extractedSubjects = [];
+
+            let docSgpa = "";
+            let docCgpa = "";
+
+            // Flatten backend multi-semester structure into verified list
+            if (data.semesters && data.semesters.length > 0) {
+                data.semesters.forEach(semBlock => {
+                    let semKey = semBlock.semester;
+                    
+                    // Match semester strings to keys sem1-sem4
+                    if (semKey.toLowerCase().includes("sem1") || semKey.toLowerCase().includes("semester 1") || semKey.toLowerCase().includes("first")) {
+                        semKey = "sem1";
+                    } else if (semKey.toLowerCase().includes("sem2") || semKey.toLowerCase().includes("semester 2") || semKey.toLowerCase().includes("second")) {
+                        semKey = "sem2";
+                    } else if (semKey.toLowerCase().includes("sem3") || semKey.toLowerCase().includes("semester 3") || semKey.toLowerCase().includes("third")) {
+                        semKey = "sem3";
+                    } else if (semKey.toLowerCase().includes("sem4") || semKey.toLowerCase().includes("semester 4") || semKey.toLowerCase().includes("fourth")) {
+                        semKey = "sem4";
+                    } else {
+                        semKey = ""; // Needs verification
+                    }
+
+                    if (semKey === state.activeSemester || (semKey === "" && docSgpa === "")) {
+                        if (semBlock.sgpa !== undefined && semBlock.sgpa !== "") docSgpa = semBlock.sgpa;
+                        if (semBlock.cgpa !== undefined && semBlock.cgpa !== "") docCgpa = semBlock.cgpa;
+                    }
+
+                    if (semBlock.subjects && semBlock.subjects.length > 0) {
+                        semBlock.subjects.forEach(sub => {
+                            state.extractionSession.extractedSubjects.push({
+                                id: 'verify_' + Date.now() + '_' + Math.floor(Math.random() * 1000) + '_' + state.extractionSession.extractedSubjects.length,
+                                semester: semKey,
+                                code: sub.code || '',
+                                name: sub.name || '',
+                                credits: sub.credits !== undefined && sub.credits !== "" ? parseFloat(sub.credits) : null,
+                                obtainedMarks: sub.obtainedMarks !== undefined && sub.obtainedMarks !== "" ? parseFloat(sub.obtainedMarks) : null,
+                                maximumMarks: sub.maximumMarks !== undefined && sub.maximumMarks !== "" ? parseFloat(sub.maximumMarks) : null,
+                                grade: sub.grade || '',
+                                courseType: sub.courseType || '',
+                                status: sub.status || 'Passed',
+                                confidence: sub.confidence || {}
+                            });
+                        });
+                    }
+                });
+            }
+
+            // Set document SGPA/CGPA inputs
+            dom.docSgpaInput.value = docSgpa;
+            dom.docCgpaInput.value = docCgpa;
+
+            renderVerificationRows();
+            calculateVerificationMetrics();
+        } else {
+            throw new Error(data.error || 'Server returned invalid extraction response.');
+        }
+    })
+    .catch(err => {
+        console.error("API Extraction failed:", err);
+        let errorMsg = err.message;
+        if (err.name === 'TypeError' || errorMsg.includes('Failed to fetch')) {
+            errorMsg = "The document analysis service is currently offline or unreachable. Please run the server locally or input grades manually.";
+            document.getElementById('service-offline-notice').classList.add('visible');
+        }
+        showToast("Extraction failed: " + errorMsg, "error");
+        state.extractionSession.status = 'selected';
+        showExtractionState();
+    })
+    .finally(() => {
+        dom.analyzeBtn.disabled = false;
+    });
+}
+
+// Render dynamic rows of extracted subjects inside verification panel
+function renderVerificationRows() {
+    dom.verificationRowsContainer.innerHTML = '';
+    const subjects = state.extractionSession.extractedSubjects || [];
+
+    const hasAnyMarks = subjects.some(s => s.obtainedMarks !== null || s.maximumMarks !== null);
+
+    const verifyTableHead = document.querySelector('#verification-table thead tr');
+    if (verifyTableHead) {
+        if (hasAnyMarks) {
+            verifyTableHead.innerHTML = `
+                <th style="width: 130px;">Semester</th>
+                <th>Course Code</th>
+                <th>Course Name</th>
+                <th style="width: 70px; text-align: center;">Credits</th>
+                <th style="width: 70px; text-align: center;">Obtained</th>
+                <th style="width: 70px; text-align: center;">Max</th>
+                <th style="width: 100px;">Grade</th>
+                <th style="width: 120px;">Course Type</th>
+                <th style="width: 120px;">Attempt Type</th>
+                <th style="width: 50px; text-align: center;">Remove</th>
+            `;
+        } else {
+            verifyTableHead.innerHTML = `
+                <th style="width: 130px;">Semester</th>
+                <th>Course Code</th>
+                <th>Course Name</th>
+                <th style="width: 70px; text-align: center;">Credits</th>
+                <th style="width: 100px;">Grade</th>
+                <th style="width: 100px; text-align: center;">GP</th>
+                <th style="width: 110px; text-align: center;">Status</th>
+                <th style="width: 120px;">Attempt Type</th>
+                <th style="width: 50px; text-align: center;">Remove</th>
+            `;
+        }
+    }
+
+    subjects.forEach(sub => {
+        const tr = document.createElement('tr');
+        tr.setAttribute('data-id', sub.id);
+
+        if (hasAnyMarks) {
+            tr.innerHTML = `
+                <td data-label="Semester">
+                    <select class="select-verify-sem select-verify-sem-input">
+                        <option value="">Select Semester</option>
+                        <option value="sem1" ${sub.semester === 'sem1' ? 'selected' : ''}>Semester 1</option>
+                        <option value="sem2" ${sub.semester === 'sem2' ? 'selected' : ''}>Semester 2</option>
+                        <option value="sem3" ${sub.semester === 'sem3' ? 'selected' : ''}>Semester 3</option>
+                        <option value="sem4" ${sub.semester === 'sem4' ? 'selected' : ''}>Semester 4</option>
+                    </select>
+                </td>
+                <td data-label="Course Code" class="verify-code-cell">
+                    <input type="text" class="input-code verify-code-input" placeholder="Course Code" value="${sub.code}">
+                </td>
+                <td data-label="Course Name" class="verify-name-cell">
+                    <input type="text" class="input-code verify-name-input" placeholder="Course Name" value="${sub.name || ''}">
+                </td>
+                <td data-label="Credits" class="verify-credits-cell">
+                    <input type="number" step="any" class="input-credits verify-credits-input" placeholder="Credits" value="${sub.credits === null ? '' : sub.credits}">
+                </td>
+                <td data-label="Obtained" class="verify-obtained-cell">
+                    <input type="number" step="any" class="input-marks verify-obtained-input" placeholder="Obtained" value="${sub.obtainedMarks === null ? '' : sub.obtainedMarks}">
+                </td>
+                <td data-label="Max" class="verify-max-cell">
+                    <input type="number" step="any" class="input-marks verify-max-input" placeholder="Max" value="${sub.maximumMarks === null ? '' : sub.maximumMarks}">
+                </td>
+                <td data-label="Grade" class="verify-grade-cell">
+                    <select class="select-grade verify-grade-input">
+                        <option value="">Select Grade</option>
+                        ${Object.keys(GRADE_POINT_MAPPING).map(g => `<option value="${g}" ${sub.grade === g ? 'selected' : ''}>${g}</option>`).join('')}
+                    </select>
+                </td>
+                <td data-label="Course Type" class="verify-type-cell">
+                    <select class="select-type verify-type-input">
+                        <option value="">Select Course Type</option>
+                        <option value="Theory" ${sub.courseType === 'Theory' ? 'selected' : ''}>Theory</option>
+                        <option value="Other" ${sub.courseType === 'Other' ? 'selected' : ''}>Other than Theory</option>
+                    </select>
+                </td>
+                <td data-label="Attempt Type" class="verify-attempt-cell">
+                    <select class="select-type verify-attempt-type-input">
+                        <option value="">Select Attempt Type</option>
+                        <option value="original" ${sub.attemptType === 'original' ? 'selected' : ''}>Original</option>
+                        <option value="supplementary" ${sub.attemptType === 'supplementary' ? 'selected' : ''}>Supplementary</option>
+                        <option value="re-examination" ${sub.attemptType === 're-examination' ? 'selected' : ''}>Re-examination</option>
+                        <option value="improvement" ${sub.attemptType === 'improvement' ? 'selected' : ''}>Improvement</option>
+                    </select>
+                </td>
+                <td data-label="Remove" style="text-align: center;">
+                    <button type="button" class="btn-remove verify-remove-btn">&times;</button>
+                </td>
+            `;
+        } else {
+            const gp = GRADE_POINT_MAPPING[sub.grade];
+            let statusText = 'Passed';
+            if (sub.grade === 'F') statusText = 'Backlog';
+            else if (sub.grade === 'W') statusText = 'Fail / Attendance';
+            else if (sub.grade === 'PP') statusText = 'Passed';
+            else if (sub.grade === 'NP') statusText = 'Not Passed';
+            else if (sub.grade === 'AU') statusText = 'Audit';
+            else if (sub.grade === 'Satisfactory') statusText = 'Satisfactory';
+            else if (sub.grade === 'Unsatisfactory') statusText = 'Unsatisfactory';
+            else if (sub.grade === 'I') statusText = 'Incomplete';
+
+            tr.innerHTML = `
+                <td data-label="Semester">
+                    <select class="select-verify-sem select-verify-sem-input">
+                        <option value="">Select Semester</option>
+                        <option value="sem1" ${sub.semester === 'sem1' ? 'selected' : ''}>Semester 1</option>
+                        <option value="sem2" ${sub.semester === 'sem2' ? 'selected' : ''}>Semester 2</option>
+                        <option value="sem3" ${sub.semester === 'sem3' ? 'selected' : ''}>Semester 3</option>
+                        <option value="sem4" ${sub.semester === 'sem4' ? 'selected' : ''}>Semester 4</option>
+                    </select>
+                </td>
+                <td data-label="Course Code" class="verify-code-cell">
+                    <input type="text" class="input-code verify-code-input" placeholder="Course Code" value="${sub.code}">
+                </td>
+                <td data-label="Course Name" class="verify-name-cell">
+                    <input type="text" class="input-code verify-name-input" placeholder="Course Name" value="${sub.name || ''}">
+                </td>
+                <td data-label="Credits" class="verify-credits-cell">
+                    <input type="number" step="any" class="input-credits verify-credits-input" placeholder="Credits" value="${sub.credits === null ? '' : sub.credits}">
+                </td>
+                <td data-label="Grade" class="verify-grade-cell">
+                    <select class="select-grade verify-grade-input">
+                        <option value="">Select Grade</option>
+                        ${Object.keys(GRADE_POINT_MAPPING).map(g => `<option value="${g}" ${sub.grade === g ? 'selected' : ''}>${g}</option>`).join('')}
+                    </select>
+                </td>
+                <td data-label="GP" class="verify-gp-cell" style="text-align: center; font-weight: 700;">${gp !== undefined ? gp : '—'}</td>
+                <td data-label="Status" class="verify-status-cell" style="text-align: center;"><span class="status-text">${statusText}</span></td>
+                <td data-label="Attempt Type" class="verify-attempt-cell">
+                    <select class="select-type verify-attempt-type-input">
+                        <option value="">Select Attempt Type</option>
+                        <option value="original" ${sub.attemptType === 'original' ? 'selected' : ''}>Original</option>
+                        <option value="supplementary" ${sub.attemptType === 'supplementary' ? 'selected' : ''}>Supplementary</option>
+                        <option value="re-examination" ${sub.attemptType === 're-examination' ? 'selected' : ''}>Re-examination</option>
+                        <option value="improvement" ${sub.attemptType === 'improvement' ? 'selected' : ''}>Improvement</option>
+                    </select>
+                </td>
+                <td data-label="Remove" style="text-align: center;">
+                    <button type="button" class="btn-remove verify-remove-btn">&times;</button>
+                </td>
+            `;
+        }
+
+        // Event listeners
+        const semSelect = tr.querySelector('.select-verify-sem-input');
+        if (semSelect) {
+            semSelect.addEventListener('change', (e) => {
+                updateExtractedSubject(sub.id, 'semester', e.target.value);
+            });
+        }
+
+        const codeInput = tr.querySelector('.verify-code-input');
+        if (codeInput) {
+            codeInput.addEventListener('input', (e) => {
+                updateExtractedSubject(sub.id, 'code', e.target.value);
+            });
+        }
+
+        const nameInput = tr.querySelector('.verify-name-input');
+        if (nameInput) {
+            nameInput.addEventListener('input', (e) => {
+                updateExtractedSubject(sub.id, 'name', e.target.value);
+            });
+        }
+
+        const creditsInput = tr.querySelector('.verify-credits-input');
+        if (creditsInput) {
+            creditsInput.addEventListener('input', (e) => {
+                const val = e.target.value === '' ? null : parseFloat(e.target.value);
+                updateExtractedSubject(sub.id, 'credits', val);
+            });
+        }
+
+        const obtainedInput = tr.querySelector('.verify-obtained-input');
+        if (obtainedInput) {
+            obtainedInput.addEventListener('input', (e) => {
+                const val = e.target.value === '' ? null : parseFloat(e.target.value);
+                updateExtractedSubject(sub.id, 'obtainedMarks', val);
+            });
+        }
+
+        const maxInput = tr.querySelector('.verify-max-input');
+        if (maxInput) {
+            maxInput.addEventListener('input', (e) => {
+                const val = e.target.value === '' ? null : parseFloat(e.target.value);
+                updateExtractedSubject(sub.id, 'maximumMarks', val);
+            });
+        }
+
+        const gradeInput = tr.querySelector('.verify-grade-input');
+        if (gradeInput) {
+            gradeInput.addEventListener('change', (e) => {
+                updateExtractedSubject(sub.id, 'grade', e.target.value);
+            });
+        }
+
+        const typeInput = tr.querySelector('.verify-type-input');
+        if (typeInput) {
+            typeInput.addEventListener('change', (e) => {
+                updateExtractedSubject(sub.id, 'courseType', e.target.value);
+            });
+        }
+
+        const attemptInput = tr.querySelector('.verify-attempt-type-input');
+        if (attemptInput) {
+            attemptInput.addEventListener('change', (e) => {
+                updateExtractedSubject(sub.id, 'attemptType', e.target.value);
+            });
+        }
+
+        const removeBtn = tr.querySelector('.verify-remove-btn');
+        if (removeBtn) {
+            removeBtn.addEventListener('click', () => {
+                removeExtractedSubject(sub.id);
+            });
+        }
+
+        dom.verificationRowsContainer.appendChild(tr);
+        updateVerificationRowDOM(sub.id);
+    });
+}
+
+// Modify temporary values inside verification row list
+function updateExtractedSubject(id, field, value) {
+    const sub = state.extractionSession.extractedSubjects.find(s => s.id === id);
+    if (sub) {
+        sub[field] = value;
+
+        if (field === 'obtainedMarks' || field === 'maximumMarks' || field === 'courseType') {
+            if (sub.obtainedMarks !== null && sub.maximumMarks !== null && sub.courseType !== '') {
+                const calc = calculateGradeFromMarks(sub.courseType, sub.obtainedMarks, sub.maximumMarks);
+                if (calc && !calc.error) {
+                    sub.grade = calc.grade;
+                }
+            }
+        }
+
+        calculateVerificationMetrics();
+        updateVerificationRowDOM(id);
+    }
+}
+
+// Render dynamic validation highlights and mismatch messages inside row
+function updateVerificationRowDOM(id) {
+    const sub = state.extractionSession.extractedSubjects.find(s => s.id === id);
+    if (!sub) return;
+
+    const tr = document.querySelector(`tr[data-id="${sub.id}"]`);
+    if (!tr) return;
+
+    const inputCode = tr.querySelector('.verify-code-input');
+    const inputCredits = tr.querySelector('.verify-credits-input');
+    const inputObtained = tr.querySelector('.verify-obtained-input');
+    const selectGrade = tr.querySelector('.verify-grade-input');
+
+    if (inputCode) {
+        if (sub.confidence && sub.confidence.code === 'low') {
+            inputCode.classList.add('input-highlight-warning');
+        } else {
+            inputCode.classList.remove('input-highlight-warning');
+        }
+    }
+
+    if (inputCredits) {
+        if (sub.confidence && sub.confidence.credits === 'low') {
+            inputCredits.classList.add('input-highlight-warning');
+        } else {
+            inputCredits.classList.remove('input-highlight-warning');
+        }
+    }
+
+    if (inputObtained) {
+        if (sub.confidence && (sub.confidence.marks === 'low' || sub.confidence.marks === 'medium')) {
+            inputObtained.classList.add('input-highlight-warning');
+        } else {
+            inputObtained.classList.remove('input-highlight-warning');
+        }
+    }
+
+    const tdGrade = tr.querySelector('.verify-grade-cell');
+    if (tdGrade) {
+        let gradeWarn = tdGrade.querySelector('.validation-warning');
+        let gradeSuccess = tdGrade.querySelector('.validation-success');
+
+        if (gradeWarn) gradeWarn.remove();
+        if (gradeSuccess) gradeSuccess.remove();
+
+        if (selectGrade) {
+            selectGrade.value = sub.grade;
+        }
+
+        const hasMarks = sub.obtainedMarks !== null && sub.maximumMarks !== null;
+        const hasType = sub.courseType !== '';
+
+        if (hasMarks && !hasType) {
+            gradeWarn = document.createElement('span');
+            gradeWarn.className = 'validation-warning';
+            gradeWarn.textContent = 'Course type required';
+            tdGrade.appendChild(gradeWarn);
+        } else if (hasMarks && hasType && sub.grade !== '') {
+            const calc = calculateGradeFromMarks(sub.courseType, sub.obtainedMarks, sub.maximumMarks);
+            if (calc && !calc.error) {
+                if (calc.grade === sub.grade) {
+                    gradeSuccess = document.createElement('span');
+                    gradeSuccess.className = 'validation-success';
+                    gradeSuccess.style.color = 'var(--success)';
+                    gradeSuccess.style.fontSize = '0.75rem';
+                    gradeSuccess.style.display = 'block';
+                    gradeSuccess.textContent = '✓ Grade matches marks';
+                    tdGrade.appendChild(gradeSuccess);
+                } else {
+                    gradeWarn = document.createElement('span');
+                    gradeWarn.className = 'validation-warning';
+                    gradeWarn.textContent = '⚠ Grade mismatch — please verify.';
+                    tdGrade.appendChild(gradeWarn);
+                }
+            }
+        }
+    }
+}
+
+function addExtractedSubject() {
+    const newSub = {
+        id: 'verify_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        semester: '',
+        code: '',
+        name: '',
+        credits: null,
+        obtainedMarks: null,
+        maximumMarks: null,
+        grade: '',
+        courseType: '',
+        status: ''
+    };
+    state.extractionSession.extractedSubjects.push(newSub);
+    renderVerificationRows();
+    calculateVerificationMetrics();
+}
+
+// Compute live metrics check inside verification editor panel
+function calculateVerificationMetrics() {
+    const subjects = state.extractionSession.extractedSubjects;
+
+    // Calculate Calculated SGPA for state.activeSemester
+    const activeSemRows = subjects.filter(s => s.semester === state.activeSemester && s.credits !== null && s.credits > 0 && s.grade !== '');
+    let activeCreditsSum = 0;
+    let activeWeightSum = 0;
+    activeSemRows.forEach(s => {
+        activeCreditsSum += s.credits;
+        activeWeightSum += (s.credits * GRADE_POINT_MAPPING[s.grade]);
+    });
+    const calculatedSGPA = activeCreditsSum > 0 ? (activeWeightSum / activeCreditsSum) : null;
+
+    // Calculate Calculated CGPA over all semesters in verification rows
+    const validRows = subjects.filter(s => s.semester !== '' && s.credits !== null && s.credits > 0 && s.grade !== '');
+    let overallCreditsSum = 0;
+    let overallWeightSum = 0;
+    validRows.forEach(s => {
+        overallCreditsSum += s.credits;
+        overallWeightSum += (s.credits * GRADE_POINT_MAPPING[s.grade]);
+    });
+    const calculatedCGPA = overallCreditsSum > 0 ? (overallWeightSum / overallCreditsSum) : null;
+
+    // Update comparative displays
+    dom.calcSgpaVerify.textContent = calculatedSGPA !== null ? calculatedSGPA.toFixed(2) : '—';
+    dom.calcCgpaVerify.textContent = calculatedCGPA !== null ? calculatedCGPA.toFixed(2) : '—';
+
+    const docSgpa = parseFloat(dom.docSgpaInput.value);
+    const docCgpa = parseFloat(dom.docCgpaInput.value);
+
+    // SGPA Mismatch alerts
+    if (!isNaN(docSgpa) && calculatedSGPA !== null) {
+        if (Math.abs(docSgpa - calculatedSGPA) < 0.005) {
+            dom.sgpaCompareStatus.innerHTML = '<span class="compare-match">✓ Matches document</span>';
+        } else {
+            dom.sgpaCompareStatus.innerHTML = '<span class="compare-mismatch">⚠ SGPA mismatch detected</span>';
+        }
+    } else {
+        dom.sgpaCompareStatus.textContent = '';
+    }
+
+    // CGPA Mismatch alerts
+    if (!isNaN(docCgpa) && calculatedCGPA !== null) {
+        if (Math.abs(docCgpa - calculatedCGPA) < 0.005) {
+            dom.cgpaCompareStatus.innerHTML = '<span class="compare-match">✓ Matches document</span>';
+        } else {
+            dom.cgpaCompareStatus.innerHTML = '<span class="compare-mismatch">⚠ CGPA mismatch detected</span>';
+        }
+    } else {
+        dom.cgpaCompareStatus.textContent = '';
+    }
+}
+
+// Queue conflict resolution container
+const importQueue = {
+    subjectsToImport: [],
+    currentIndex: 0,
+    currentDuplicate: null
+};
+
+// Confirm and initiate import process
+function confirmImport() {
+    const subjects = state.extractionSession.extractedSubjects;
+    
+    // Filter fully valid verification rows (must have semester, credits and grade)
+    const validRows = subjects.filter(s => s.semester !== '' && s.credits !== null && s.credits > 0 && s.grade !== '');
+
+    if (validRows.length === 0) {
+        showToast("Please add at least one complete subject (with Semester, Credits, and Grade) to import.", "warning");
+        return;
+    }
+
+    importQueue.subjectsToImport = validRows;
+    importQueue.currentIndex = 0;
+    importQueue.currentDuplicate = null;
+
+    processNextImportItem();
+}
+
+// Process conflict resolution queue sequentially
+function processNextImportItem() {
+    if (importQueue.currentIndex >= importQueue.subjectsToImport.length) {
+        finalizeImport();
+        return;
+    }
+
+    const sub = importQueue.subjectsToImport[importQueue.currentIndex];
+    
+    // Check if course already exists in manual calculator
+    const existing = state.semesters[sub.semester].find(c => c.code.trim().toUpperCase() === sub.code.trim().toUpperCase());
+
+    if (existing) {
+        // Open conflict resolution modal
+        const semTitle = sub.semester.toUpperCase().replace('SEM', 'Semester ');
+        dom.duplicateModalMsg.textContent = `Possible duplicate course detected. Semester: ${semTitle}, Course Code: ${sub.code.toUpperCase()}. You already have this course in the calculator.`;
+        dom.duplicateModal.style.display = 'flex';
+        
+        importQueue.currentDuplicate = {
+            existing,
+            imported: sub
+        };
+    } else {
+        importCourse(sub);
+        importQueue.currentIndex++;
+        processNextImportItem();
+    }
+}
+
+// Resolve duplicate modals
+function resolveDuplicate(choice) {
+    if (!importQueue.currentDuplicate) return;
+
+    const existing = importQueue.currentDuplicate.existing;
+    const imported = importQueue.currentDuplicate.imported;
+
+    if (choice === 'overwrite') {
+        // Use uploaded data -> Update fields in-place
+        existing.code = imported.code;
+        existing.courseType = imported.courseType;
+        existing.obtainedMarks = imported.obtainedMarks;
+        existing.maximumMarks = imported.maximumMarks;
+        existing.credits = imported.credits;
+        existing.grade = imported.grade;
+        existing.manualGrade = imported.grade;
+        existing.gradeSource = (imported.obtainedMarks !== null && imported.maximumMarks !== null) ? 'Calculated from Marks' : 'Manual Grade';
+        existing.source = 'document';
+    } else if (choice === 'separate') {
+        // Add as separate record
+        importCourse(imported);
+    }
+    // 'keep' does nothing (keeps existing record as is)
+
+    // Hide Modal and continue queue
+    dom.duplicateModal.style.display = 'none';
+    importQueue.currentDuplicate = null;
+    importQueue.currentIndex++;
+    processNextImportItem();
+}
+
+// Create new course row from extracted properties
+function importCourse(sub) {
+    const newCourse = {
+        id: 'course_' + Date.now() + '_' + Math.floor(Math.random() * 1000) + '_' + importQueue.currentIndex,
+        code: sub.code,
+        courseType: sub.courseType,
+        obtainedMarks: sub.obtainedMarks,
+        maximumMarks: sub.maximumMarks,
+        credits: sub.credits,
+        grade: sub.grade,
+        gradeSource: (sub.obtainedMarks !== null && sub.maximumMarks !== null) ? 'Calculated from Marks' : 'Manual Grade',
+        manualGrade: sub.grade,
+        attemptType: sub.attemptType || 'original',
+        parentCourseId: sub.parentCourseId || '',
+        documentType: sub.documentType || '',
+        source: 'document',
+        confidence: sub.confidence || {}
+    };
+
+    state.semesters[sub.semester].push(newCourse);
+}
+
+// Finalize verification import updates and compare results
+function finalizeImport() {
+    // Save imported document values to state for card footer comparison
+    state.importedDocSgpa = parseFloat(dom.docSgpaInput.value);
+    state.importedDocCgpa = parseFloat(dom.docCgpaInput.value);
+
+    // Reset extraction session
+    state.extractionSession.file = null;
+    state.extractionSession.status = 'empty';
+    state.extractionSession.extractedSubjects = [];
+    dom.fileInput.value = '';
+    showExtractionState();
+
+    // Redraw and recalculate manual calculator
+    render();
+}
+
+// Cancel verification editor and purge temporary data
+function cancelExtraction() {
+    showConfirmModal("Are you sure you want to cancel? All temporary extracted data will be discarded.", () => {
+        removeUploadedFile();
+        showToast("Extraction session cancelled.", "info");
+    });
+}
+
+// ==============================================================
+// PART 5: BACKLOGS, SUPPLEMENTARY, & GRADE IMPROVEMENTS LOGIC
+// ==============================================================
+
+// Attempts Resolution Engine
+function buildAttemptHistories() {
+    const allCourses = [];
+    Object.keys(state.semesters).forEach(semKey => {
+        state.semesters[semKey].forEach(c => {
+            allCourses.push({ ...c, semKey });
+        });
+    });
+
+    const normalizedGroups = {};
+    allCourses.forEach(c => {
+        const normCode = c.code.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        if (!normCode) return;
+        if (!normalizedGroups[normCode]) {
+            normalizedGroups[normCode] = [];
+        }
+        normalizedGroups[normCode].push(c);
+    });
+
+    const resolvedCourses = [];
+    const attemptHistoryList = [];
+    const unlinkedRepeats = [];
+
+    Object.keys(normalizedGroups).forEach(normCode => {
+        const group = normalizedGroups[normCode];
+
+        if (group.length === 1) {
+            const c = group[0];
+            const singleStatus = c.grade === 'F' ? 'backlog' : (c.grade === 'W' ? 'withdrawn' : 'passed');
+            resolvedCourses.push({
+                ...c,
+                status: singleStatus,
+                finalGrade: c.grade,
+                finalStatus: singleStatus
+            });
+            return;
+        }
+
+        // Multiple attempts matching the same code!
+        const roots = group.filter(c => !c.parentCourseId || !group.some(parent => parent.id === c.parentCourseId));
+
+        if (roots.length > 1) {
+            // Auto link attempts if relationship is clear
+            const originalAttempt = roots.find(c => c.attemptType === 'original' || c.grade === 'F' || c.attemptType === '');
+            
+            if (originalAttempt) {
+                const otherAttempts = roots.filter(c => c.id !== originalAttempt.id);
+                let canAutoLink = true;
+                
+                otherAttempts.forEach(child => {
+                    if (child.attemptType !== 'supplementary' && child.attemptType !== 're-examination' && child.attemptType !== 'improvement') {
+                        canAutoLink = false;
+                    }
+                });
+
+                if (canAutoLink) {
+                    otherAttempts.forEach(child => {
+                        child.parentCourseId = originalAttempt.id;
+                    });
+                } else {
+                    // Check if ignored previously
+                    const isIgnored = state.ignoredRepeats && state.ignoredRepeats.includes(normCode);
+                    if (!isIgnored) {
+                        otherAttempts.forEach(child => {
+                            unlinkedRepeats.push({
+                                parentId: originalAttempt.id,
+                                childId: child.id,
+                                code: originalAttempt.code
+                            });
+                        });
+                    }
+                }
+            } else {
+                const isIgnored = state.ignoredRepeats && state.ignoredRepeats.includes(normCode);
+                if (!isIgnored) {
+                    for (let i = 1; i < roots.length; i++) {
+                        unlinkedRepeats.push({
+                            parentId: roots[0].id,
+                            childId: roots[i].id,
+                            code: roots[0].code
+                        });
+                    }
+                }
+            }
+        }
+
+        // Re-evaluate parent-child chains after auto-linking
+        const finalRoots = group.filter(c => !c.parentCourseId || !group.some(parent => parent.id === c.parentCourseId));
+
+        finalRoots.forEach(root => {
+            const chain = [root];
+            let current = root;
+            
+            while (true) {
+                const children = group.filter(c => c.parentCourseId === current.id);
+                if (children.length === 0) break;
+                children.sort((a, b) => a.id.localeCompare(b.id));
+                chain.push(...children);
+                current = children[children.length - 1];
+            }
+
+            let finalGrade = root.grade;
+            let finalGp = GRADE_POINT_MAPPING[root.grade] || 0;
+            let finalStatus = root.grade === 'F' ? 'backlog' : (root.grade === 'W' ? 'withdrawn' : 'passed');
+            let finalCredits = root.credits;
+
+            for (let i = 1; i < chain.length; i++) {
+                const attempt = chain[i];
+                const attemptGrade = attempt.grade;
+                const attemptGp = GRADE_POINT_MAPPING[attemptGrade] || 0;
+
+                if (attempt.attemptType === 'supplementary' || attempt.attemptType === 're-examination') {
+                    if (finalGrade === 'F' || finalGrade === 'W') {
+                        if (attemptGrade !== 'F' && attemptGrade !== 'W' && attemptGrade !== '') {
+                            finalGrade = attemptGrade;
+                            finalGp = attemptGp;
+                            finalStatus = 'cleared';
+                        } else if (attemptGrade === 'F' || attemptGrade === 'W') {
+                            finalGrade = attemptGrade;
+                            finalGp = 0;
+                            finalStatus = 'backlog';
+                        }
+                    }
+                } else if (attempt.attemptType === 'improvement') {
+                    if (attemptGp > finalGp && attemptGrade !== 'F' && attemptGrade !== 'W' && attemptGrade !== '') {
+                        finalGrade = attemptGrade;
+                        finalGp = attemptGp;
+                        finalStatus = 'improved';
+                    }
+                }
+            }
+
+            resolvedCourses.push({
+                ...root,
+                grade: finalGrade,
+                gradePoint: finalGp,
+                status: finalStatus,
+                credits: finalCredits,
+                chain: chain
+            });
+
+            if (chain.length > 1) {
+                attemptHistoryList.push({
+                    courseCode: root.code,
+                    courseName: root.name,
+                    semKey: root.semKey,
+                    attempts: chain,
+                    finalGrade: finalGrade,
+                    finalStatus: finalStatus,
+                    type: chain[1].attemptType || 'supplementary'
+                });
+            }
+        });
+    });
+
+    state.resolvedFinalDataset = resolvedCourses;
+    state.attemptHistories = attemptHistoryList;
+    state.unlinkedRepeats = unlinkedRepeats;
+}
+
+// Render dynamic validation highlights and mismatch warnings for repeated attempts
+function renderLinkWarnings() {
+    const container = document.getElementById('link-warning-container');
+    const desc = document.getElementById('link-warning-desc');
+    const actions = document.getElementById('link-warning-actions');
+
+    if (!container || !desc || !actions) return;
+
+    if (!state.unlinkedRepeats || state.unlinkedRepeats.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'block';
+    actions.innerHTML = '';
+
+    const uniqueRepeats = [];
+    state.unlinkedRepeats.forEach(rep => {
+        if (!uniqueRepeats.some(r => r.code === rep.code)) {
+            uniqueRepeats.push(rep);
+        }
+    });
+
+    uniqueRepeats.forEach(rep => {
+        const row = document.createElement('div');
+        row.className = 'warning-row';
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.justifyContent = 'space-between';
+        row.style.width = '100%';
+        row.innerHTML = `
+            <span class="warning-row-text" style="font-size: 0.85rem; font-weight:600; color:var(--text-main);">Possible repeated attempt detected: ${rep.code.toUpperCase()}.</span>
+            <div style="display: flex; gap: 0.5rem;">
+                <button type="button" class="btn btn-primary btn-sm" style="font-size:0.75rem; padding: 0.25rem 0.5rem;" onclick="openManualLinkModal('${rep.code}')">Link Attempts</button>
+                <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding: 0.25rem 0.5rem;" onclick="ignoreRepeats('${rep.code}')">Keep Separate</button>
+            </div>
+        `;
+        actions.appendChild(row);
+    });
+}
+
+// Render Accordion table rows representing full history logs
+function renderAttemptHistoryTable() {
+    const tbody = document.getElementById('history-rows-container');
+    const emptyMsg = document.getElementById('history-empty-message');
+    if (!tbody || !emptyMsg) return;
+
+    tbody.innerHTML = '';
+    const histories = state.attemptHistories || [];
+
+    if (histories.length === 0) {
+        emptyMsg.style.display = 'block';
+        const historyTable = document.getElementById('history-table');
+        if (historyTable) historyTable.style.display = 'none';
+        return;
+    }
+    emptyMsg.style.display = 'none';
+    const historyTable = document.getElementById('history-table');
+    if (historyTable) {
+        historyTable.style.display = 'table';
+    }
+
+    histories.forEach(hist => {
+        const tr = document.createElement('tr');
+        
+        const latest = hist.attempts[hist.attempts.length - 1];
+        const original = hist.attempts[0];
+        const semName = hist.semKey.toUpperCase().replace('SEM', 'Semester ');
+
+        tr.innerHTML = `
+            <td data-label="Course"><strong>${hist.courseCode.toUpperCase()}</strong><br><small style="color: var(--text-muted);">${hist.courseName || 'Course Name'}</small></td>
+            <td data-label="Semester" style="text-align: center;">${semName}</td>
+            <td data-label="Original Grade" style="text-align: center;"><span class="badge ${original.grade === 'F' ? 'badge-f' : 'badge-cc'}">${original.grade}</span></td>
+            <td data-label="Latest Grade" style="text-align: center;"><span class="badge ${latest.grade === 'F' ? 'badge-f' : 'badge-aa'}">${latest.grade}</span></td>
+            <td style="text-align: center; text-transform: capitalize;" data-label="Attempt Type">${hist.type}</td>
+            <td data-label="Status" style="text-align: center;">
+                <span class="status-text ${hist.finalStatus === 'cleared' ? 'status-text-passed' : (hist.finalStatus === 'improved' ? 'status-text-passed' : 'status-text-backlog')}">
+                    ${hist.finalStatus === 'cleared' ? 'Cleared' : (hist.finalStatus === 'improved' ? 'Improved' : 'Active Backlog')}
+                </span>
+            </td>
+            <td data-label="Actions" style="text-align: center;">
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="openSubjectDetailModal('${latest.id}')">View Details</button>
+            </td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+}
+
+// Open and load timeline audits inside Subject detail sidebar modal
+window.openSubjectDetailModal = function(courseId) {
+    let course = null;
+    let semKey = "";
+    Object.keys(state.semesters).forEach(key => {
+        const found = state.semesters[key].find(c => c.id === courseId);
+        if (found) {
+            course = found;
+            semKey = key;
+        }
+    });
+
+    if (!course) return;
+
+    const normCode = course.code.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const resolved = state.resolvedFinalDataset ? state.resolvedFinalDataset.find(c => c.code.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase() === normCode) : null;
+
+    const titleEl = document.getElementById('detail-course-title');
+    const codeEl = document.getElementById('detail-code');
+    const creditsEl = document.getElementById('detail-credits');
+    const nameEl = document.getElementById('detail-name');
+    const timelineContainer = document.getElementById('detail-timeline-container');
+    const auditBox = document.getElementById('detail-audit-box');
+    const finalGradeEl = document.getElementById('detail-final-grade');
+    const finalGpEl = document.getElementById('detail-final-gp');
+    const finalStatusEl = document.getElementById('detail-final-status');
+    const unlinkBtn = document.getElementById('detail-unlink-btn');
+
+    if (codeEl) codeEl.textContent = course.code.toUpperCase();
+    if (creditsEl) creditsEl.textContent = course.credits !== null ? course.credits : '—';
+    if (nameEl) nameEl.textContent = course.name || 'Course Name';
+
+    if (timelineContainer) timelineContainer.innerHTML = '';
+
+    const chain = resolved ? resolved.chain : [course];
+
+    chain.forEach((c, idx) => {
+        const semName = (c.semKey || semKey).toUpperCase().replace('SEM', 'Semester ');
+        const timelineItem = document.createElement('div');
+        timelineItem.className = `timeline-item timeline-${c.attemptType || 'original'}`;
+        
+        let typeLabel = c.attemptType || 'original';
+        typeLabel = typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1);
+
+        timelineItem.innerHTML = `
+            <div class="timeline-header">
+                <span class="timeline-title">${idx + 1}. Attempt (${typeLabel})</span>
+                <span class="timeline-meta">${semName}</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.25rem;">
+                <span class="badge ${c.grade === 'F' ? 'badge-f' : 'badge-aa'}">${c.grade || '—'}</span>
+                <span class="timeline-body">Grade Point: ${GRADE_POINT_MAPPING[c.grade] !== undefined ? GRADE_POINT_MAPPING[c.grade] : '—'} | Source: ${c.source === 'document' ? 'Document' : 'Manual'}</span>
+            </div>
+        `;
+        if (timelineContainer) timelineContainer.appendChild(timelineItem);
+    });
+
+    const finalGrade = resolved ? resolved.grade : course.grade;
+    const finalGp = GRADE_POINT_MAPPING[finalGrade];
+    const finalStatus = resolved ? resolved.status : (course.grade === 'F' ? 'backlog' : (course.grade === 'W' ? 'withdrawn' : 'passed'));
+
+    if (finalGradeEl) finalGradeEl.textContent = finalGrade || '—';
+    if (finalGpEl) finalGpEl.textContent = finalGp !== undefined ? `(Grade Point: ${finalGp})` : '—';
+    
+    if (finalStatusEl) {
+        finalStatusEl.className = 'status-text';
+        if (finalStatus === 'passed') {
+            finalStatusEl.textContent = 'Passed';
+            finalStatusEl.classList.add('status-text-passed');
+        } else if (finalStatus === 'cleared') {
+            finalStatusEl.textContent = 'Cleared';
+            finalStatusEl.classList.add('status-text-passed');
+        } else if (finalStatus === 'improved') {
+            finalStatusEl.textContent = 'Improved';
+            finalStatusEl.classList.add('status-text-passed');
+        } else if (finalStatus === 'backlog') {
+            finalStatusEl.textContent = finalGrade === 'W' ? 'Fail / Attendance' : 'Active Backlog';
+            finalStatusEl.classList.add('status-text-backlog');
+        } else if (finalStatus === 'withdrawn') {
+            finalStatusEl.textContent = 'Fail / Attendance';
+            finalStatusEl.classList.add('status-text-backlog');
+        } else {
+            finalStatusEl.textContent = 'Incomplete';
+            finalStatusEl.classList.add('status-text-incomplete');
+        }
+    }
+
+    // Set Attempt Type dropdown selector and bind changes
+    const attemptSelect = document.getElementById('detail-attempt-type-select');
+    if (attemptSelect) {
+        attemptSelect.value = course.attemptType || 'original';
+        attemptSelect.onchange = function() {
+            course.attemptType = attemptSelect.value;
+            calculateAndRefresh();
+            render();
+            // Refresh modal layout with updated state
+            openSubjectDetailModal(courseId);
+        };
+    }
+
+    document.getElementById('subject-detail-panel').style.display = 'flex';
+};
+
+// Open Manual linking selection overlays
+window.openManualLinkModal = function(code) {
+    const parentSelect = document.getElementById('link-parent-select');
+    const childSelect = document.getElementById('link-child-select');
+    
+    if (!parentSelect || !childSelect) return;
+
+    parentSelect.innerHTML = '';
+    childSelect.innerHTML = '';
+    
+    const normCode = code.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const group = [];
+    Object.keys(state.semesters).forEach(semKey => {
+        state.semesters[semKey].forEach(c => {
+            const cNorm = c.code.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            if (cNorm === normCode) {
+                group.push({ ...c, semKey });
+            }
+        });
+    });
+
+    group.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        const semTitle = c.semKey.toUpperCase().replace('SEM', 'Semester ');
+        opt.textContent = `${c.code || 'No Code'} (${semTitle} - Grade: ${c.grade || '—'} - ${c.attemptType || 'Original'})`;
+        
+        parentSelect.appendChild(opt.cloneNode(true));
+        childSelect.appendChild(opt.cloneNode(true));
+    });
+
+    if (group.length >= 2) {
+        parentSelect.selectedIndex = 0;
+        childSelect.selectedIndex = 1;
+    }
+
+    document.getElementById('linking-modal').style.display = 'flex';
+};
+
+// Ignore duplicate prompt alerts
+window.ignoreRepeats = function(code) {
+    if (!state.ignoredRepeats) {
+        state.ignoredRepeats = [];
+    }
+    const normCode = code.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    state.ignoredRepeats.push(normCode);
+    renderLinkWarnings();
+};
+
+// Initialize Attempt actions event triggers
+function initAttemptEvents() {
+    const accHeader = document.getElementById('history-accordion-header');
+    const accContent = document.getElementById('history-accordion-content');
+    const accIcon = document.getElementById('accordion-toggle-icon');
+
+    if (accHeader && accContent && accIcon) {
+        accHeader.addEventListener('click', () => {
+            const isHidden = accContent.style.display === 'none';
+            accContent.style.display = isHidden ? 'block' : 'none';
+            accIcon.textContent = isHidden ? '[ Collapse - ]' : '[ Expand + ]';
+        });
+    }
+
+    const cancelLink = document.getElementById('cancel-link-btn');
+    if (cancelLink) {
+        cancelLink.addEventListener('click', () => {
+            document.getElementById('linking-modal').style.display = 'none';
+        });
+    }
+
+    const confirmLink = document.getElementById('confirm-link-btn');
+    if (confirmLink) {
+        confirmLink.addEventListener('click', () => {
+            const parentId = document.getElementById('link-parent-select').value;
+            const childId = document.getElementById('link-child-select').value;
+            const type = document.getElementById('link-type-select').value;
+
+            if (parentId === childId) {
+                showToast("Cannot link a course to itself.", "error");
+                return;
+            }
+
+            let childCourse = null;
+            Object.keys(state.semesters).forEach(key => {
+                const found = state.semesters[key].find(c => c.id === childId);
+                if (found) childCourse = found;
+            });
+
+            if (childCourse) {
+                childCourse.parentCourseId = parentId;
+                childCourse.attemptType = type;
+                document.getElementById('linking-modal').style.display = 'none';
+                calculateAndRefresh();
+                render();
+            }
+        });
+    }
+
+    const closeDetailX = document.getElementById('close-detail-btn');
+    if (closeDetailX) {
+        closeDetailX.addEventListener('click', () => {
+            document.getElementById('subject-detail-panel').style.display = 'none';
+        });
+    }
+
+    const closeDetailBtn = document.getElementById('detail-close-btn');
+    if (closeDetailBtn) {
+        closeDetailBtn.addEventListener('click', () => {
+            document.getElementById('subject-detail-panel').style.display = 'none';
+        });
+    }
+}
+
+// ==============================================================
+// PART 6: FINAL ACADEMIC ANALYSIS DASHBOARD
+// ==============================================================
+
+// Orchestrate showing dashboard empty states and redrawing elements
+function renderDashboard() {
+    if (!dom.dashboardSection) return;
+
+    // Check if there is any course entered in the semesters
+    const totalRawCourses = Object.keys(state.semesters).reduce((sum, sem) => sum + state.semesters[sem].length, 0);
+    const hasData = totalRawCourses > 0;
+
+    if (!hasData) {
+        dom.dashboardEmptyState.style.display = 'block';
+        dom.dashboardContents.style.display = 'none';
+        return;
+    }
+
+    dom.dashboardEmptyState.style.display = 'none';
+    dom.dashboardContents.style.display = 'block';
+
+    // 1. Calculate and populate top summary card metrics
+    const activeSemData = calculateSemester(state.activeSemester);
+    const overallData = calculateCombined(['sem1', 'sem2', 'sem3', 'sem4']);
+
+    // Selected semesters calculation
+    const selectedSemsList = Object.keys(state.selectedSemesters).filter(sem => state.selectedSemesters[sem] === true);
+    const selectedData = calculateCombined(selectedSemsList);
+
+    // Current SGPA
+    dom.dashCurrentSgpa.textContent = activeSemData.sgpa !== null ? activeSemData.sgpa.toFixed(2) : '—';
+    
+    // Overall CGPA
+    dom.dashOverallCgpa.textContent = overallData.cgpa !== null ? overallData.cgpa.toFixed(2) : '—';
+
+    // Selected CGPA & Semesters Label
+    dom.dashSelectedCgpa.textContent = selectedData.cgpa !== null ? selectedData.cgpa.toFixed(2) : '—';
+    if (selectedSemsList.length > 0) {
+        const labels = selectedSemsList.map(s => s.replace('sem', 'S'));
+        dom.dashSelectedSemestersLabel.textContent = `Semesters: ${labels.join(', ')}`;
+    } else {
+        dom.dashSelectedSemestersLabel.textContent = 'No Semester Selected';
+    }
+
+    // Equivalent Percentage
+    dom.dashPercentage.textContent = overallData.cgpa !== null ? (overallData.cgpa * 10).toFixed(2) + '%' : '—';
+
+    // Total Credits
+    dom.dashTotalCredits.textContent = overallData.totalCredits > 0 
+        ? (overallData.totalCredits % 1 === 0 ? overallData.totalCredits : overallData.totalCredits.toFixed(2)) 
+        : '0';
+
+    // Active Backlogs
+    const resolvedCourses = state.resolvedFinalDataset || [];
+    const activeBacklogs = resolvedCourses.filter(c => c.grade === 'F' || c.grade === 'W').length;
+    dom.dashActiveBacklogs.textContent = activeBacklogs;
+    
+    // Backlog footer text
+    if (activeBacklogs > 0) {
+        dom.dashActiveBacklogs.style.color = 'var(--danger)';
+        dom.dashActiveBacklogsFooter.textContent = `${activeBacklogs} unresolved backlog(s)`;
+    } else {
+        dom.dashActiveBacklogs.style.color = 'var(--primary)';
+        dom.dashActiveBacklogsFooter.textContent = 'All clear';
+    }
+
+    // 2. Render subcomponents
+    renderDashSemesterSummaryTable();
+    renderSemesterChart();
+    renderSubjectTable();
+    renderGradeDistribution();
+    renderCreditSummary();
+    renderAttemptSummary();
+    renderFinalAcademicStatus();
+    renderInsights();
+}
+
+// Render the semester performance breakdown table and best/lowest highlights
+function renderDashSemesterSummaryTable() {
+    const tbody = dom.dashSemesterRows;
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+    
+    const validSems = [];
+
+    for (let i = 1; i <= 4; i++) {
+        const semKey = 'sem' + i;
+        const semName = 'Semester ' + i;
+        const semData = calculateSemester(semKey);
+
+        if (semData.hasData) {
+            const tr = document.createElement('tr');
+            
+            // Format status badge
+            let statusClass = 'status-text-incomplete';
+            if (semData.hasValidData) {
+                if (semData.status === 'Passed') statusClass = 'status-text-passed';
+                else if (semData.status === 'Backlog') statusClass = 'status-text-backlog';
+            }
+
+            tr.innerHTML = `
+                <td style="padding: 0.5rem 0.75rem;"><strong>${semName}</strong></td>
+                <td style="padding: 0.5rem 0.75rem; text-align: center;">${semData.totalCredits % 1 === 0 ? semData.totalCredits : semData.totalCredits.toFixed(2)}</td>
+                <td style="padding: 0.5rem 0.75rem; text-align: center; font-weight: 700;">${semData.sgpa !== null ? semData.sgpa.toFixed(2) : '—'}</td>
+                <td style="padding: 0.5rem 0.75rem; text-align: center;">${semData.backlogs}</td>
+                <td style="padding: 0.5rem 0.75rem; text-align: center;"><span class="${statusClass}">${semData.hasValidData ? semData.status : 'Incomplete'}</span></td>
+            `;
+            tbody.appendChild(tr);
+
+            if (semData.hasValidData && semData.sgpa !== null) {
+                validSems.push({ key: semKey, name: semName, sgpa: semData.sgpa });
+            }
+        }
+    }
+
+    // Determine Best / Lowest semesters
+    const bestEl = dom.dashBestSem;
+    const lowestEl = dom.dashLowestSem;
+
+    if (validSems.length === 0) {
+        if (bestEl) bestEl.textContent = '—';
+        if (lowestEl) lowestEl.textContent = '—';
+        return;
+    }
+
+    // Find highest SGPA
+    const highestSgpa = Math.max(...validSems.map(s => s.sgpa));
+    const lowestSgpa = Math.min(...validSems.map(s => s.sgpa));
+
+    const bestSems = validSems.filter(s => Math.abs(s.sgpa - highestSgpa) < 0.005);
+    const lowestSems = validSems.filter(s => Math.abs(s.sgpa - lowestSgpa) < 0.005);
+
+    if (bestEl) {
+        bestEl.innerHTML = bestSems.map(s => `${s.name} <span style="font-weight:800;">(${s.sgpa.toFixed(2)})</span>`).join(', ');
+    }
+    if (lowestEl) {
+        lowestEl.innerHTML = lowestSems.map(s => `${s.name} <span style="font-weight:800;">(${s.sgpa.toFixed(2)})</span>`).join(', ');
+    }
+}
+
+// Generate responsive SVG Line Graph for SGPA trends
+function renderSemesterChart() {
+    const container = dom.semesterChartContainer;
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    const data = [];
+    for (let i = 1; i <= 4; i++) {
+        const semKey = 'sem' + i;
+        const semData = calculateSemester(semKey);
+        if (semData.hasValidData && semData.sgpa !== null) {
+            data.push({ label: `Sem ${i}`, val: semData.sgpa });
+        }
+    }
+
+    if (data.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem;">No SGPA trend data available.</p>';
+        return;
+    }
+
+    // Responsive sizing parameters
+    const width = container.clientWidth || 320;
+    const height = 180;
+    const paddingLeft = 30;
+    const paddingRight = 15;
+    const paddingTop = 25;
+    const paddingBottom = 30;
+
+    const chartWidth = width - paddingLeft - paddingRight;
+    const chartHeight = height - paddingTop - paddingBottom;
+
+    // Calculate Coordinates
+    const xCoords = [];
+    if (data.length === 1) {
+        xCoords.push(paddingLeft + chartWidth / 2);
+    } else {
+        const step = chartWidth / (data.length - 1);
+        for (let i = 0; i < data.length; i++) {
+            xCoords.push(paddingLeft + i * step);
+        }
+    }
+
+    // Y coordinates mapped from 0 to 10
+    const yCoords = data.map(d => {
+        const ratio = d.val / 10;
+        return paddingTop + chartHeight * (1 - ratio);
+    });
+
+    let pointsSvg = '';
+    let pathD = '';
+    let gridLinesSvg = '';
+
+    // Draw horizontal grid lines for SGPA values (0, 2, 4, 6, 8, 10)
+    const yTicks = [0, 2, 4, 6, 8, 10];
+    yTicks.forEach(tick => {
+        const ratio = tick / 10;
+        const yPos = paddingTop + chartHeight * (1 - ratio);
+        gridLinesSvg += `
+            <line x1="${paddingLeft}" y1="${yPos}" x2="${width - paddingRight}" y2="${yPos}" stroke="var(--border-color)" stroke-dasharray="3,3" stroke-width="1" />
+            <text x="${paddingLeft - 8}" y="${yPos + 4}" font-size="9" text-anchor="end" fill="var(--text-muted)" font-family="var(--font-sans)">${tick}</text>
+        `;
+    });
+
+    // Build line path and points
+    for (let i = 0; i < data.length; i++) {
+        pointsSvg += `
+            <circle cx="${xCoords[i]}" cy="${yCoords[i]}" r="4" fill="var(--primary)" stroke="var(--bg-card)" stroke-width="1.5" />
+            <text x="${xCoords[i]}" y="${yCoords[i] - 8}" font-size="10" font-weight="700" text-anchor="middle" fill="var(--text-main)" font-family="var(--font-sans)">${data[i].val.toFixed(2)}</text>
+            <text x="${xCoords[i]}" y="${height - paddingBottom + 16}" font-size="9" text-anchor="middle" fill="var(--text-muted)" font-family="var(--font-sans)">${data[i].label}</text>
+        `;
+
+        if (i === 0) {
+            pathD = `M ${xCoords[i]} ${yCoords[i]}`;
+        } else {
+            pathD += ` L ${xCoords[i]} ${yCoords[i]}`;
+        }
+    }
+
+    const svg = `
+        <svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" style="overflow: visible;">
+            ${gridLinesSvg}
+            ${data.length > 1 ? `<path d="${pathD}" fill="none" stroke="var(--primary)" stroke-width="2" />` : ''}
+            ${pointsSvg}
+        </svg>
+    `;
+
+    container.innerHTML = svg;
+}
+
+// Render dynamic filtered subject rows inside dashboard table
+function renderSubjectTable() {
+    const tbody = dom.dashSubjectRows;
+    const emptyMsg = dom.dashSubjectsEmpty;
+    if (!tbody || !emptyMsg) return;
+
+    tbody.innerHTML = '';
+
+    const semFilter = dom.filterSemester.value;
+    const statusFilter = dom.filterStatus.value;
+    const gradeFilter = dom.filterGrade.value;
+    const attemptFilter = document.getElementById('filter-attempt') ? document.getElementById('filter-attempt').value : 'all';
+    const searchQuery = document.getElementById('dash-search-input') ? document.getElementById('dash-search-input').value.toLowerCase().trim() : '';
+
+    const resolved = state.resolvedFinalDataset || [];
+    
+    // Filter dataset
+    const filtered = resolved.filter(c => {
+        // Semester Filter
+        if (semFilter !== 'all' && c.semKey !== semFilter) return false;
+
+        // Grade Filter
+        if (gradeFilter !== 'all' && c.grade !== gradeFilter) return false;
+
+        // Status Filter
+        if (statusFilter !== 'all') {
+            if (statusFilter === 'passed' && c.grade === 'F') return false;
+            if (statusFilter === 'backlog' && c.grade !== 'F') return false;
+            if (statusFilter === 'withdrawn' && c.grade !== 'W') return false;
+            if (statusFilter === 'cleared' && c.status !== 'cleared') return false;
+            if (statusFilter === 'improved' && c.status !== 'improved') return false;
+        }
+
+        // Attempt Filter
+        if (attemptFilter !== 'all') {
+            if ((c.attemptType || 'original') !== attemptFilter) return false;
+        }
+
+        // Search Query
+        if (searchQuery !== '') {
+            const codeMatch = c.code.toLowerCase().includes(searchQuery);
+            const nameMatch = c.name ? c.name.toLowerCase().includes(searchQuery) : false;
+            if (!codeMatch && !nameMatch) return false;
+        }
+
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        emptyMsg.style.display = 'block';
+        return;
+    }
+
+    emptyMsg.style.display = 'none';
+
+    filtered.forEach(c => {
+        const tr = document.createElement('tr');
+        const semName = c.semKey.toUpperCase().replace('SEM', 'Semester ');
+        const gp = GRADE_POINT_MAPPING[c.grade];
+        
+        let statusBadgeClass = 'status-text-incomplete';
+        let statusText = 'Incomplete';
+
+        if (c.grade === 'F') {
+            statusBadgeClass = 'status-text-backlog';
+            statusText = 'Backlog';
+        } else if (c.grade === 'W') {
+            statusBadgeClass = 'status-text-backlog';
+            statusText = 'Fail / Attendance';
+        } else if (c.grade !== '') {
+            statusBadgeClass = 'status-text-passed';
+            if (c.status === 'cleared') statusText = 'Cleared';
+            else if (c.status === 'improved') statusText = 'Improved';
+            else statusText = 'Passed';
+        }
+
+        let typeLabel = c.attemptType || 'original';
+        typeLabel = typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1);
+
+        tr.innerHTML = `
+            <td style="padding: 0.5rem 0.75rem;">${semName}</td>
+            <td style="padding: 0.5rem 0.75rem;"><strong>${c.code.toUpperCase()}</strong></td>
+            <td style="padding: 0.5rem 0.75rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name || '—'}</td>
+            <td style="padding: 0.5rem 0.75rem; text-align: center;">${c.credits !== null ? c.credits : '—'}</td>
+            <td style="padding: 0.5rem 0.75rem; text-align: center;"><span class="badge ${c.grade === 'F' ? 'badge-f' : (c.grade === 'W' ? 'badge-cc' : 'badge-aa')}">${c.grade || '—'}</span></td>
+            <td style="padding: 0.5rem 0.75rem; text-align: center;">${gp !== undefined ? gp : '—'}</td>
+            <td style="padding: 0.5rem 0.75rem; text-align: center;"><span class="${statusBadgeClass}">${statusText}</span></td>
+            <td style="padding: 0.5rem 0.75rem; text-align: center; text-transform: capitalize;">${typeLabel}</td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+}
+
+// Calculate and render grade frequency bars
+function renderGradeDistribution() {
+    const container = dom.gradeDistributionContainer;
+    const emptyMsg = dom.gradeDistributionEmpty;
+    if (!container || !emptyMsg) return;
+
+    container.innerHTML = '';
+
+    const resolved = state.resolvedFinalDataset || [];
+    const validGrades = resolved.filter(c => c.grade !== '');
+
+    if (validGrades.length === 0) {
+        emptyMsg.style.display = 'block';
+        return;
+    }
+
+    emptyMsg.style.display = 'none';
+
+    // Count distributions
+    const counts = { 'AA': 0, 'AB': 0, 'BB': 0, 'BC': 0, 'CC': 0, 'CD': 0, 'DD': 0, 'F': 0, 'W': 0, 'PP': 0, 'NP': 0, 'AU': 0, 'Satisfactory': 0, 'Unsatisfactory': 0, 'I': 0 };
+    validGrades.forEach(c => {
+        if (counts[c.grade] !== undefined) {
+            counts[c.grade]++;
+        }
+    });
+
+    const maxCount = Math.max(...Object.values(counts));
+
+    Object.keys(counts).forEach(grade => {
+        const count = counts[grade];
+        const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
+
+        const row = document.createElement('div');
+        row.className = 'distribution-row';
+        row.innerHTML = `
+            <span class="distribution-label">${grade}</span>
+            <div class="distribution-track">
+                <div class="distribution-fill" style="width: ${pct}%; background-color: ${grade === 'F' ? 'var(--danger)' : (grade === 'W' ? 'var(--warning)' : 'var(--primary)')};"></div>
+            </div>
+            <span class="distribution-count">${count}</span>
+        `;
+        container.appendChild(row);
+    });
+}
+
+// Render dynamic credit breakdown summary metrics
+function renderCreditSummary() {
+    const resolved = state.resolvedFinalDataset || [];
+    
+    let totalEntered = 0;
+    let totalPassed = 0;
+    let totalBacklog = 0;
+    let totalWithdrawn = 0;
+
+    resolved.forEach(c => {
+        if (c.credits !== null) {
+            totalEntered += c.credits;
+            if (c.grade === 'F') {
+                totalBacklog += c.credits;
+            } else if (c.grade === 'W') {
+                totalWithdrawn += c.credits;
+            } else if (c.grade !== '') {
+                totalPassed += c.credits;
+            }
+        }
+    });
+
+    const enteredEl = dom.creditEntered;
+    const passedEl = dom.creditPassed;
+    const backlogEl = dom.creditBacklog;
+    const withdrawnEl = dom.creditWithdrawn;
+
+    if (enteredEl) enteredEl.textContent = totalEntered % 1 === 0 ? totalEntered : totalEntered.toFixed(2);
+    if (passedEl) passedEl.textContent = totalPassed % 1 === 0 ? totalPassed : totalPassed.toFixed(2);
+    if (backlogEl) backlogEl.textContent = totalBacklog % 1 === 0 ? totalBacklog : totalBacklog.toFixed(2);
+    if (withdrawnEl) withdrawnEl.textContent = totalWithdrawn % 1 === 0 ? totalWithdrawn : totalWithdrawn.toFixed(2);
+}
+
+// Render Attempts tracking summary metrics list
+function renderAttemptSummary() {
+    const container = dom.attemptsSummaryContainer;
+    const emptyMsg = dom.attemptsSummaryEmpty;
+    if (!container || !emptyMsg) return;
+
+    container.innerHTML = '';
+
+    const rawCourses = [];
+    Object.keys(state.semesters).forEach(semKey => {
+        rawCourses.push(...state.semesters[semKey]);
+    });
+
+    const resolved = state.resolvedFinalDataset || [];
+
+    const activeBacklogs = resolved.filter(c => c.grade === 'F' || c.grade === 'W').length;
+    const clearedBacklogs = resolved.filter(c => c.status === 'cleared').length;
+    const suppAttempts = rawCourses.filter(c => c.attemptType === 'supplementary').length;
+    const reexamAttempts = rawCourses.filter(c => c.attemptType === 're-examination').length;
+    const improveAttempts = rawCourses.filter(c => c.attemptType === 'improvement').length;
+    const withdrawnCourses = resolved.filter(c => c.grade === 'W').length;
+
+    const hasAnyAttempts = (activeBacklogs + clearedBacklogs + suppAttempts + reexamAttempts + improveAttempts + withdrawnCourses) > 0;
+
+    if (!hasAnyAttempts) {
+        emptyMsg.style.display = 'block';
+        return;
+    }
+
+    emptyMsg.style.display = 'none';
+
+    const metrics = [
+        { label: 'Active Backlogs', value: activeBacklogs, color: activeBacklogs > 0 ? 'var(--danger)' : 'var(--text-main)' },
+        { label: 'Previously Cleared', value: clearedBacklogs, color: clearedBacklogs > 0 ? 'var(--success)' : 'var(--text-main)' },
+        { label: 'Supplementary Attempts', value: suppAttempts, color: 'var(--text-main)' },
+        { label: 'Re-examinations', value: reexamAttempts, color: 'var(--text-main)' },
+        { label: 'Improvement Attempts', value: improveAttempts, color: 'var(--text-main)' },
+        { label: 'Withdrawn Courses', value: withdrawnCourses, color: withdrawnCourses > 0 ? 'var(--warning)' : 'var(--text-main)' }
+    ];
+
+    metrics.forEach(m => {
+        const div = document.createElement('div');
+        div.style.display = 'flex';
+        div.style.justifyContent = 'space-between';
+        div.style.fontSize = '0.85rem';
+        div.style.padding = '0.25rem 0';
+        div.style.borderBottom = '1px solid var(--border-color)';
+        div.innerHTML = `
+            <span style="color: var(--text-muted);">${m.label}</span>
+            <strong style="color: ${m.color};">${m.value}</strong>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// Calculate and render final standing status card
+function renderFinalAcademicStatus() {
+    const card = dom.finalStatusCard;
+    const titleEl = dom.finalStatusTitle;
+    const descEl = dom.finalStatusDesc;
+
+    if (!card || !titleEl || !descEl) return;
+
+    const resolved = state.resolvedFinalDataset || [];
+    const hasUnresolved = state.unlinkedRepeats && state.unlinkedRepeats.length > 0;
+    const activeBacklogs = resolved.filter(c => c.grade === 'F' || c.grade === 'W').length;
+
+    // Reset status styles
+    card.className = 'final-status-large-card';
+    card.style.borderColor = 'var(--border-color)';
+    card.style.backgroundColor = 'var(--bg-card)';
+
+    if (hasUnresolved) {
+        titleEl.textContent = 'Review Required';
+        titleEl.style.color = 'var(--warning)';
+        descEl.textContent = 'Unresolved repeated attempts require verification before the final status can be confirmed.';
+        card.style.borderColor = 'var(--warning)';
+        card.style.backgroundColor = 'rgba(217, 119, 6, 0.05)';
+    } else if (activeBacklogs > 0) {
+        titleEl.textContent = 'Backlog Present';
+        titleEl.style.color = 'var(--danger)';
+        descEl.textContent = `${activeBacklogs} active backlog course(s) remain unresolved.`;
+        card.style.borderColor = 'var(--danger)';
+        card.style.backgroundColor = 'rgba(220, 38, 38, 0.05)';
+    } else {
+        titleEl.textContent = 'All Entered Courses Cleared';
+        titleEl.style.color = 'var(--success)';
+        descEl.textContent = 'All currently resolved courses are cleared and no active F grade remains.';
+        card.style.borderColor = 'var(--success)';
+        card.style.backgroundColor = 'rgba(22, 163, 74, 0.05)';
+    }
+
+    // Determine Data Source
+    let isManual = false;
+    let isImport = false;
+
+    Object.keys(state.semesters).forEach(key => {
+        state.semesters[key].forEach(c => {
+            if (c.source === 'document') isImport = true;
+            else isManual = true;
+        });
+    });
+
+    const sourceEl = dom.dashSourceIndicator;
+    if (sourceEl) {
+        if (isManual && isImport) sourceEl.textContent = 'Mixed';
+        else if (isImport) sourceEl.textContent = 'Imported Document';
+        else if (isManual) sourceEl.textContent = 'Manual Entry';
+        else sourceEl.textContent = '—';
+    }
+
+    // Determine Data Quality
+    const qualityEl = dom.dashQualityIndicator;
+    if (qualityEl) {
+        let hasMissing = false;
+        
+        Object.keys(state.semesters).forEach(key => {
+            state.semesters[key].forEach(c => {
+                if (c.credits === null || c.grade === '' || c.code.trim() === '') {
+                    hasMissing = true;
+                }
+            });
+        });
+
+        if (hasUnresolved) {
+            qualityEl.textContent = 'Needs Verification';
+            qualityEl.style.color = 'var(--warning)';
+        } else if (hasMissing) {
+            qualityEl.textContent = 'Incomplete';
+            qualityEl.style.color = 'var(--danger)';
+        } else {
+            qualityEl.textContent = 'Complete';
+            qualityEl.style.color = 'var(--success)';
+        }
+    }
+}
+
+// Generate dynamically calculated factual performance insights
+function renderInsights() {
+    const container = dom.insightsListContainer;
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    const insights = [];
+    const validSems = [];
+
+    for (let i = 1; i <= 4; i++) {
+        const semKey = 'sem' + i;
+        const semData = calculateSemester(semKey);
+        if (semData.hasValidData && semData.sgpa !== null) {
+            validSems.push({ index: i, name: `Semester ${i}`, sgpa: semData.sgpa });
+        }
+    }
+
+    // Best semester insight
+    if (validSems.length > 0) {
+        const highestSgpa = Math.max(...validSems.map(s => s.sgpa));
+        const best = validSems.filter(s => Math.abs(s.sgpa - highestSgpa) < 0.005);
+        const names = best.map(b => b.name).join(' and ');
+        insights.push(`Your highest SGPA was in ${names} (${highestSgpa.toFixed(2)}).`);
+    }
+
+    // Trend insights
+    if (validSems.length >= 2) {
+        validSems.sort((a, b) => a.index - b.index);
+        for (let i = 0; i < validSems.length - 1; i++) {
+            const current = validSems[i];
+            const next = validSems[i + 1];
+            if (next.sgpa > current.sgpa) {
+                insights.push(`Your SGPA increased from ${current.name} to ${next.name}.`);
+            } else if (next.sgpa < current.sgpa) {
+                insights.push(`Your SGPA decreased from ${current.name} to ${next.name}.`);
+            }
+        }
+    }
+
+    // Attempts resolutions insights
+    const resolved = state.resolvedFinalDataset || [];
+    
+    const activeBacklogs = resolved.filter(c => c.grade === 'F' || c.grade === 'W').length;
+    if (activeBacklogs > 0) {
+        insights.push(`${activeBacklogs} active backlog(s) remain.`);
+    }
+
+    const clearedBacklogs = resolved.filter(c => c.status === 'cleared').length;
+    if (clearedBacklogs > 0) {
+        insights.push(`${clearedBacklogs} course(s) were cleared through supplementary/re-examination attempts.`);
+    }
+
+    const improvedCourses = resolved.filter(c => c.status === 'improved').length;
+    if (improvedCourses > 0) {
+        insights.push(`${improvedCourses} course(s) were successfully improved.`);
+    }
+
+    if (insights.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem; font-style: italic; margin: auto 0;">No factual performance insights generated yet.</p>';
+        return;
+    }
+
+    insights.forEach(ins => {
+        const li = document.createElement('li');
+        li.textContent = ins;
+        li.style.color = 'var(--text-main)';
+        container.appendChild(li);
+    });
+}
+
+
+
+// ==============================================================
+// PART 7 OVERHAUL EXTENSIONS (TOASTS, MODALS, ACCESSIBILITY, FILTERS)
+// ==============================================================
+
+// Accessible Toast Notification System
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    
+    let icon = 'ℹ️';
+    if (type === 'success') icon = '✓';
+    else if (type === 'warning') icon = '⚠';
+    else if (type === 'error') icon = '✗';
+    
+    toast.innerHTML = `
+        <span class="toast-icon">${icon}</span>
+        <span class="toast-msg">${message}</span>
+        <button type="button" class="toast-close" aria-label="Close Notification">&times;</button>
+    `;
+    
+    container.appendChild(toast);
+    
+    const closeBtn = toast.querySelector('.toast-close');
+    closeBtn.addEventListener('click', () => {
+        toast.classList.add('leaving');
+        toast.addEventListener('animationend', () => toast.remove());
+    });
+    
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.classList.add('leaving');
+            toast.addEventListener('animationend', () => toast.remove());
+        }
+    }, 4000);
+}
+
+// Accessible Custom Reusable Confirmation Modal
+function showConfirmModal(message, onConfirm) {
+    const modal = document.getElementById('confirm-modal');
+    const msgEl = document.getElementById('confirm-modal-msg');
+    const okBtn = document.getElementById('confirm-modal-ok');
+    const cancelBtn = document.getElementById('confirm-modal-cancel');
+    const closeBtn = document.getElementById('confirm-modal-close');
+    
+    if (!modal || !msgEl || !okBtn || !cancelBtn) return;
+    
+    msgEl.textContent = message;
+    modal.style.display = 'flex';
+    
+    // Clean old listeners
+    const newOkBtn = okBtn.cloneNode(true);
+    const newCancelBtn = cancelBtn.cloneNode(true);
+    const newCloseBtn = closeBtn.cloneNode(true);
+    okBtn.parentNode.replaceChild(newOkBtn, okBtn);
+    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+    closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
+    
+    newOkBtn.addEventListener('click', () => {
+        modal.style.display = 'none';
+        if (onConfirm) onConfirm();
+    });
+    
+    const closeModal = () => {
+        modal.style.display = 'none';
+    };
+    newCancelBtn.addEventListener('click', closeModal);
+    newCloseBtn.addEventListener('click', closeModal);
+}
+
+// Mobile Hamburger Navigation Toggle
+function initMobileMenu() {
+    const hamburgerBtn = document.getElementById('hamburger-menu-btn');
+    const mobileMenu = document.getElementById('mobile-drawer-menu');
+    
+    if (hamburgerBtn && mobileMenu) {
+        hamburgerBtn.addEventListener('click', () => {
+            hamburgerBtn.classList.toggle('open');
+            mobileMenu.classList.toggle('open');
+        });
+        
+        mobileMenu.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', () => {
+                hamburgerBtn.classList.remove('open');
+                mobileMenu.classList.remove('open');
+            });
+        });
+    }
+}
+
+// Grade Rules Tab Switcher
+function initGradeRulesTabs() {
+    const tabRuleTheory = document.getElementById('tab-rule-theory');
+    const tabRuleOther = document.getElementById('tab-rule-other');
+    const panelRuleTheory = document.getElementById('panel-rule-theory');
+    const panelRuleOther = document.getElementById('panel-rule-other');
+    
+    if (tabRuleTheory && tabRuleOther && panelRuleTheory && panelRuleOther) {
+        tabRuleTheory.addEventListener('click', () => {
+            tabRuleTheory.classList.add('active');
+            tabRuleOther.classList.remove('active');
+            panelRuleTheory.classList.add('active');
+            panelRuleOther.classList.remove('active');
+        });
+        tabRuleOther.addEventListener('click', () => {
+            tabRuleOther.classList.add('active');
+            tabRuleTheory.classList.remove('active');
+            panelRuleOther.classList.add('active');
+            panelRuleTheory.classList.remove('active');
+        });
+    }
+}
+
+// Dashboard Subject Search and Filters
+function initDashboardSearch() {
+    const searchInput = document.getElementById('dash-search-input');
+    const attemptFilter = document.getElementById('filter-attempt');
+    const clearFiltersBtn = document.getElementById('btn-clear-filters');
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            renderSubjectTable();
+        });
+    }
+    if (attemptFilter) {
+        attemptFilter.addEventListener('change', () => {
+            renderSubjectTable();
+        });
+    }
+    if (clearFiltersBtn) {
+        clearFiltersBtn.addEventListener('click', () => {
+            if (searchInput) searchInput.value = '';
+            if (attemptFilter) attemptFilter.value = 'all';
+            if (dom.filterSemester) dom.filterSemester.value = 'all';
+            if (dom.filterStatus) dom.filterStatus.value = 'all';
+            if (dom.filterGrade) dom.filterGrade.value = 'all';
+            renderSubjectTable();
+            showToast("Dashboard filters cleared", "info");
+        });
+    }
+}
+
+// Document Service Offline Status check
+function checkServiceAvailability() {
+    fetch('/')
+    .then(res => {
+        if (res.ok) {
+            document.getElementById('service-offline-notice').classList.remove('visible');
+        } else {
+            document.getElementById('service-offline-notice').classList.add('visible');
+        }
+    })
+    .catch(() => {
+        document.getElementById('service-offline-notice').classList.add('visible');
+    });
+}
+
+// Keyboard Modals Closure
+function initAccessibilityKeys() {
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(m => m.style.display = 'none');
+            const detailPanel = document.getElementById('subject-detail-panel');
+            if (detailPanel) detailPanel.style.display = 'none';
+            const linkingModal = document.getElementById('linking-modal');
+            if (linkingModal) linkingModal.style.display = 'none';
+            const duplicateModal = document.getElementById('duplicate-modal');
+            if (duplicateModal) duplicateModal.style.display = 'none';
+            const confirmModal = document.getElementById('confirm-modal');
+            if (confirmModal) confirmModal.style.display = 'none';
+        }
+    });
+}
+
+// Auto Init on Page Load
+document.addEventListener('DOMContentLoaded', () => {
+    initMobileMenu();
+    initGradeRulesTabs();
+    initDashboardSearch();
+    initAccessibilityKeys();
+    checkServiceAvailability();
+});
+
+
+// Toggle Calculator mode columns and headers
+function toggleCalculatorMode() {
+    const isGradeMode = state.calculationMethod === 'grade';
+    const table = document.getElementById('subjects-table');
+    
+    const gradeDesc = document.getElementById('grade-method-desc');
+    const marksDesc = document.getElementById('marks-method-desc');
+    if (gradeDesc) gradeDesc.style.display = isGradeMode ? 'block' : 'none';
+    if (marksDesc) marksDesc.style.display = isGradeMode ? 'none' : 'block';
+
+    // Toggle grade-mode class on the table for column visibility
+    if (table) {
+        if (isGradeMode) {
+            table.classList.add('grade-mode');
+        } else {
+            table.classList.remove('grade-mode');
+        }
+    }
+}
