@@ -286,8 +286,6 @@ const dom = {
     saveHistoryModal: document.getElementById('save-history-modal'),
     closeSaveHistoryModalBtn: document.getElementById('close-save-history-modal-btn'),
     saveHistorySourceType: document.getElementById('save-history-source-type'),
-    saveHistoryNameInput: document.getElementById('save-history-name-input'),
-    saveHistoryRollInput: document.getElementById('save-history-roll-input'),
     saveHistoryNicknameInput: document.getElementById('save-history-nickname-input'),
     btnCancelSaveHistoryModal: document.getElementById('btn-cancel-save-history-modal'),
     btnConfirmSaveHistoryModal: document.getElementById('btn-confirm-save-history-modal'),
@@ -4491,6 +4489,9 @@ function handleLogout() {
 let stateHistory = [];
 let editingHistoryRecord = null;
 let viewingHistoryRecord = null;
+// Carries the public-lookup record context when the user clicks "Save to My History"
+// so saveHistoryRecord can pull name/roll from it rather than from removed modal inputs.
+let pendingSavePublicRecord = null;
 
 // Initialize history controls & event listeners
 window.initHistorySystem = function() {
@@ -4498,11 +4499,12 @@ window.initHistorySystem = function() {
 
     // Save calculator snapshot triggers
     dom.saveCurrentHistoryBtn.addEventListener('click', () => {
-        const activeUser = state.auth.user;
-        dom.saveHistoryNameInput.value = activeUser ? (activeUser.displayName || '') : '';
-        dom.saveHistoryRollInput.value = '';
-        dom.saveHistoryNicknameInput.value = '';
+        // Pre-fill nickname from the active profile's nickname
+        const activeProf = state.profiles.find(p => p.id === state.activeProfileId);
+        const defaultNickname = activeProf ? (activeProf.nickname || 'My M.Tech Result') : 'My M.Tech Result';
+        dom.saveHistoryNicknameInput.value = defaultNickname;
         dom.saveHistorySourceType.value = 'own';
+        pendingSavePublicRecord = null; // Saving own current result, no public record context
         dom.saveHistoryModal.style.display = 'flex';
     });
     
@@ -4514,20 +4516,28 @@ window.initHistorySystem = function() {
     });
     
     dom.btnConfirmSaveHistoryModal.addEventListener('click', () => {
-        const nickname = dom.saveHistoryNicknameInput.value;
-        const name = dom.saveHistoryNameInput.value;
-        const roll = dom.saveHistoryRollInput.value;
+        const nickname = (dom.saveHistoryNicknameInput.value || '').trim();
         const sourceType = dom.saveHistorySourceType.value;
-        
-        if (!name.trim()) {
-            showToast("Please enter the student name.", "warning");
+
+        if (!nickname) {
+            showToast("Please enter a private nickname for this snapshot.", "warning");
             return;
         }
-        if (!roll.trim()) {
-            showToast("Please enter the Roll Number / Student ID.", "warning");
-            return;
+
+        let name = '';
+        let roll = '';
+
+        if (sourceType === 'viewed' && pendingSavePublicRecord) {
+            // Saving a public lookup result — use its own student data
+            name = pendingSavePublicRecord.studentName || '';
+            roll = pendingSavePublicRecord.studentId || '';
+        } else {
+            // Saving own current result — pull from the active profile
+            const activeProf = state.profiles.find(p => p.id === state.activeProfileId);
+            name = activeProf ? (activeProf.studentName || '') : '';
+            roll = activeProf ? (activeProf.rollNumber || '') : '';
         }
-        
+
         saveHistoryRecord(nickname, name, roll, sourceType);
     });
     
@@ -4742,6 +4752,15 @@ async function saveHistoryRecord(nickname, name, roll, sourceType, semestersOver
     
     const semestersSnapshot = semestersOverride || JSON.parse(JSON.stringify(state.semesters));
     
+    // Pull department/specialization from active profile
+    const activeProf = state.profiles.find(p => p.id === state.activeProfileId);
+    const department = (sourceType === 'viewed' && pendingSavePublicRecord)
+        ? (pendingSavePublicRecord.department || '')
+        : (activeProf ? (activeProf.department || '') : '');
+    const specialization = (sourceType === 'viewed' && pendingSavePublicRecord)
+        ? (pendingSavePublicRecord.specialization || '')
+        : (activeProf ? (activeProf.specialization || '') : '');
+
     // Temporarily replace semesters to calculate metrics
     const originalSemesters = state.semesters;
     state.semesters = semestersSnapshot;
@@ -4759,6 +4778,8 @@ async function saveHistoryRecord(nickname, name, roll, sourceType, semestersOver
         sourceType: sourceType, 
         studentId: roll.trim(),
         studentName: name.trim(),
+        department,
+        specialization,
         semesters: semestersSnapshot,
         summary: {
             overallCGPA: overall.cgpa,
@@ -4780,38 +4801,40 @@ async function saveHistoryRecord(nickname, name, roll, sourceType, semestersOver
         if (state.auth.mode === 'firebase') {
             const db = getFirebaseDb();
             if (db) {
-                // 1. Save Nickname
-                if (nickname.trim()) {
+                // 1. Save Nickname (only when roll is known)
+                if (nickname.trim() && roll.trim()) {
                     await setDoc(doc(db, "users", uid, "nicknames", roll.trim()), {
                         nickname: nickname.trim(),
                         updatedAt: serverTimestamp()
-                    });
+                    }, { merge: true });
                 }
                 
-                // 2. Save Snapshot History
+                // 2. Save Snapshot History — always addDoc (immutable snapshot)
                 await addDoc(collection(db, "users", uid, "history"), {
                     ...record,
                     createdAt: serverTimestamp(),
                     updatedAt: serverTimestamp()
                 });
                 
-                // 3. Save snapshot to public profiles directory if sourceType is 'own'
-                if (sourceType === 'own') {
+                // 3. Update public profile if this is the user's own result and roll is known.
+                //    Use merge:true to preserve any existing fields already written.
+                if (sourceType === 'own' && roll.trim()) {
                     await setDoc(doc(db, "publicProfiles", roll.trim()), {
                         studentId: roll.trim(),
                         studentName: name.trim(),
+                        department,
+                        specialization,
                         semesters: semestersSnapshot,
                         summary: record.summary,
                         ownerUid: uid,
-                        createdAt: serverTimestamp(),
                         updatedAt: serverTimestamp()
-                    });
+                    }, { merge: true });
                 }
                 showToast("Snapshot saved to history successfully.", "success");
             }
         } else {
             // Mock Mode
-            if (nickname.trim()) {
+            if (nickname.trim() && roll.trim()) {
                 const mockNicks = JSON.parse(localStorage.getItem(`nits_mock_nicknames_${uid}`) || '{}');
                 mockNicks[roll.trim()] = nickname.trim();
                 localStorage.setItem(`nits_mock_nicknames_${uid}`, JSON.stringify(mockNicks));
@@ -4822,20 +4845,27 @@ async function saveHistoryRecord(nickname, name, roll, sourceType, semestersOver
             mockHist.unshift(record);
             localStorage.setItem(`nits_mock_history_${uid}`, JSON.stringify(mockHist));
             
-            if (sourceType === 'own') {
+            if (sourceType === 'own' && roll.trim()) {
                 const publicProfiles = JSON.parse(localStorage.getItem('nits_mock_public_profiles') || '{}');
-                publicProfiles[roll.trim()] = {
-                    studentId: roll.trim(),
-                    studentName: name.trim(),
-                    semesters: semestersSnapshot,
-                    summary: record.summary,
-                    ownerUid: uid
-                };
+                // Merge with existing data rather than replacing
+                publicProfiles[roll.trim()] = Object.assign(
+                    publicProfiles[roll.trim()] || {},
+                    {
+                        studentId: roll.trim(),
+                        studentName: name.trim(),
+                        department,
+                        specialization,
+                        semesters: semestersSnapshot,
+                        summary: record.summary,
+                        ownerUid: uid
+                    }
+                );
                 localStorage.setItem('nits_mock_public_profiles', JSON.stringify(publicProfiles));
             }
             showToast("Snapshot saved to mock history successfully.", "success");
         }
         
+        pendingSavePublicRecord = null;
         dom.saveHistoryModal.style.display = 'none';
         await loadHistoryFromDb();
     } catch (err) {
@@ -5084,8 +5114,12 @@ function renderHistoryList() {
         const badgeLabel = isOwn ? 'My Data' : 'Viewed';
         
         const displayLabel = record.nickname ? record.nickname : (isOwn ? 'My Academic Record' : 'Viewed Student');
-        const displayNameText = record.studentName || (isOwn ? 'Subham Kumar' : '—');
+        const recordTypeLabel = isOwn ? 'My academic record' : "Someone else's academic record";
         
+        // Build department line — prefer record.department; fall back gracefully
+        const deptName = record.department ? (DEPARTMENTS[record.department]?.name || record.department) : '';
+        const deptLine = deptName ? `Dept: ${deptName}` : '';
+
         const sum = record.summary || {};
         const cgpaStr = sum.overallCGPA !== undefined && sum.overallCGPA !== null ? sum.overallCGPA.toFixed(2) : '—';
         const creditsStr = sum.totalCredits !== undefined && sum.totalCredits !== null ? String(sum.totalCredits) : '—';
@@ -5101,7 +5135,7 @@ function renderHistoryList() {
             <div class="history-card-header">
                 <div>
                     <h4 class="history-card-title">${displayLabel}</h4>
-                    <p class="history-card-subtitle">${displayNameText} | ID: ${record.studentId || '—'}</p>
+                    <p class="history-card-subtitle">${recordTypeLabel}${deptLine ? ' · ' + deptLine : ''}</p>
                 </div>
                 <span class="history-card-badge ${badgeClass}">${badgeLabel}</span>
             </div>
@@ -5278,9 +5312,9 @@ function openHistoryDetail(record) {
         saveBtn.textContent = 'Save to My History';
         saveBtn.addEventListener('click', () => {
             dom.historyDetailModal.style.display = 'none';
-            dom.saveHistoryNameInput.value = record.studentName;
-            dom.saveHistoryRollInput.value = record.studentId;
-            dom.saveHistoryNicknameInput.value = '';
+            // Store the public record so saveHistoryRecord can retrieve name/roll from it
+            pendingSavePublicRecord = record;
+            dom.saveHistoryNicknameInput.value = record.nickname || '';
             dom.saveHistorySourceType.value = 'viewed';
             dom.saveHistoryModal.style.display = 'flex';
         });
