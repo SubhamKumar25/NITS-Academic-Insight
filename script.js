@@ -3958,15 +3958,6 @@ function setupAuthUIEvents() {
             }
         });
     }
-
-    // Wire dropdown logout button to logout handler
-    const pdLogoutBtn = document.getElementById('pd-logout-btn');
-    if (pdLogoutBtn) {
-        pdLogoutBtn.addEventListener('click', e => {
-            e.preventDefault();
-            handleLogout();
-        });
-    }
 }
 
 function validateEmailFormat(email) {
