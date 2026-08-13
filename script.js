@@ -460,14 +460,14 @@ function switchTab(tabId) {
         const sec = document.getElementById(t);
         if (sec) sec.style.display = (t === tabId) ? 'block' : 'none';
         
-        const navId = t === 'advanced-calc' ? 'nav-advanced-btn' : `nav-${t}-btn`;
+        const navId = t === 'calculator' ? 'nav-calc-btn' : (t === 'advanced-calc' ? 'nav-advanced-btn' : `nav-${t}-btn`);
         const navBtn = document.getElementById(navId);
         if (navBtn) {
             if (t === tabId) navBtn.classList.add('active');
             else navBtn.classList.remove('active');
         }
 
-        const mobId = t === 'advanced-calc' ? 'mob-advanced-btn' : `mob-${t}-btn`;
+        const mobId = t === 'calculator' ? 'mob-calc-btn' : (t === 'advanced-calc' ? 'mob-advanced-btn' : `mob-${t}-btn`);
         const mobBtn = document.getElementById(mobId);
         if (mobBtn) {
             if (t === tabId) mobBtn.classList.add('active');
@@ -483,6 +483,7 @@ function switchTab(tabId) {
         renderAnalysis();
     }
 }
+
 
 // Initialize All UI Event Listeners
 function initEventListeners() {
