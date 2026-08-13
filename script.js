@@ -4117,7 +4117,6 @@ function loadProfilesFromDb() {}
 
 let autoSaveTimeout = null;
 
-let autoSaveTimeout = null;
 
 function triggerAutoSave() {
     const statusEl = document.getElementById('auto-save-status');
