@@ -2893,6 +2893,26 @@ a.btn-text:hover {
   border-color: var(--danger);
 }
 
+/* Two-Level Student Profile Accordion & Calculation Items */
+.profile-group-card {
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.profile-group-card:hover {
+  border-color: var(--primary) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+.calculation-item-row {
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.calculation-item-row:hover {
+  background: var(--surface) !important;
+  border-color: var(--primary) !important;
+}
+
+
 
 /* 26. Result Analyzer Workbench & Status Badge Styles */
 .status-badge {

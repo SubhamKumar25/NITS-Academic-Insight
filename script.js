@@ -43,13 +43,18 @@ const state = {
         user: null,
         mode: 'mock'
     },
-    // Current result being edited (flat — no profiles)
-    currentResult: {
-        resultId: null,   // null = new draft; string = editing existing history record
-        nickname: 'My M.Tech Result',
+    // Two-Level Hierarchy State: Current Student Profile & Active Calculation
+    currentProfile: {
+        profileId: null,        // null = unsaved new profile; string = existing profile ID
+        studentName: 'Rohit',
         program: 'mtech',
-        department: 'cse',
-        isDirty: false
+        department: 'cse'
+    },
+    currentCalculation: {
+        calculationId: null,        // null = unsaved new calculation; string = existing calculation ID
+        resultNickname: 'Main Result',
+        isDirty: false,
+        mode: 'normal'              // 'normal' | 'advanced'
     },
     semesters: {
         sem1: [], // Array of courses: { id, code, courseType, obtainedMarks, maximumMarks, credits, grade, gradeSource, manualGrade, attemptType, parentCourseId, documentType, source }
@@ -355,14 +360,16 @@ const dom = {
     editHistCoursesEditor: document.getElementById('edit-hist-courses-editor'),
     editHistVersionDisplay: document.getElementById('edit-hist-version-display'),
     btnCancelEditHistory: document.getElementById('btn-cancel-edit-history'),
-    btnSaveChangesHistory: document.getElementById('btn-save-changes-history'),
+    calcStudentName: document.getElementById('calc-student-name'),
     calcResultNickname: document.getElementById('calc-result-nickname'),
     calcProgramSelect: document.getElementById('calc-program-select'),
     calcDepartmentSelect: document.getElementById('calc-department-select'),
     calcLockStructure: document.getElementById('calc-lock-structure'),
     autoSaveStatus: document.getElementById('auto-save-status'),
     btnNewResult: document.getElementById('btn-new-result'),
-    btnSaveToHistory: document.getElementById('btn-save-to-history')
+    btnNewCalculation: document.getElementById('btn-new-calculation'),
+    btnSaveToHistory: document.getElementById('btn-save-to-history'),
+    currentProfileDisplayBadge: document.getElementById('current-profile-display-badge')
 };
 
 // Initial setup
@@ -446,28 +453,55 @@ function initEventListeners() {
         window.print();
     });
 
-    // + New Result button
+    // + New Result button (Creates New Student Profile)
     if (dom.btnNewResult) {
         dom.btnNewResult.addEventListener('click', () => {
             handleNewResult();
         });
     }
 
-    // Save to History button
+    // + New Calculation button (Adds calculation to active Student Profile)
+    if (dom.btnNewCalculation) {
+        dom.btnNewCalculation.addEventListener('click', () => {
+            handleNewCalculation();
+        });
+    }
+
+    // Save Result to History button
     if (dom.btnSaveToHistory) {
         dom.btnSaveToHistory.addEventListener('click', () => {
             saveCurrentToHistory();
         });
     }
 
+    // Student Profile Name Input
+    if (dom.calcStudentName) {
+        dom.calcStudentName.addEventListener('input', () => {
+            const nameVal = dom.calcStudentName.value.trim() || 'Rohit';
+            state.currentProfile.studentName = nameVal;
+            state.currentCalculation.isDirty = true;
+            if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = nameVal;
+            triggerAutoSave();
+        });
+    }
+
+    // Result Nickname Input
+    if (dom.calcResultNickname) {
+        dom.calcResultNickname.addEventListener('input', () => {
+            state.currentCalculation.resultNickname = dom.calcResultNickname.value;
+            state.currentCalculation.isDirty = true;
+            triggerAutoSave();
+        });
+    }
+
     // Program change — reload courses
     if (dom.calcProgramSelect) {
         dom.calcProgramSelect.addEventListener('change', () => {
-            state.currentResult.program = dom.calcProgramSelect.value;
+            state.currentProfile.program = dom.calcProgramSelect.value;
             applyPredefinedCourses();
             calculateAndRefresh();
             render();
-            state.currentResult.isDirty = true;
+            state.currentCalculation.isDirty = true;
             triggerAutoSave();
         });
     }
@@ -479,13 +513,12 @@ function initEventListeners() {
                 arr.some(c => c.grade !== '' && c.grade !== null)
             );
             const doChange = () => {
-                state.currentResult.department = dom.calcDepartmentSelect.value;
-                // Clear grades but keep course structure
+                state.currentProfile.department = dom.calcDepartmentSelect.value;
                 ['sem1', 'sem2', 'sem3', 'sem4'].forEach(s => { state.semesters[s] = []; });
                 applyPredefinedCourses();
                 calculateAndRefresh();
                 render();
-                state.currentResult.isDirty = true;
+                state.currentCalculation.isDirty = true;
                 triggerAutoSave();
             };
             if (hasGrades) {
@@ -493,8 +526,7 @@ function initEventListeners() {
                     'Changing department will reload the predefined courses. Any grades you have entered will be cleared. Continue?',
                     doChange,
                     () => {
-                        // Revert the select back to previous value on cancel
-                        dom.calcDepartmentSelect.value = state.currentResult.department;
+                        dom.calcDepartmentSelect.value = state.currentProfile.department;
                     }
                 );
             } else {
@@ -503,21 +535,16 @@ function initEventListeners() {
         });
     }
 
+    // Normal vs Advanced mode toggle (Lock Predefined Courses)
     if (dom.calcLockStructure) {
         dom.calcLockStructure.addEventListener('change', () => {
+            state.currentCalculation.mode = dom.calcLockStructure.checked ? 'normal' : 'advanced';
             renderSubjectRows();
             triggerAutoSave();
         });
     }
-
-    if (dom.calcResultNickname) {
-        dom.calcResultNickname.addEventListener('input', () => {
-            state.currentResult.nickname = dom.calcResultNickname.value;
-            state.currentResult.isDirty = true;
-            triggerAutoSave();
-        });
-    }
 }
+
 
 
 // -------------------------------------------------------------
@@ -4090,6 +4117,8 @@ function loadProfilesFromDb() {}
 
 let autoSaveTimeout = null;
 
+let autoSaveTimeout = null;
+
 function triggerAutoSave() {
     const statusEl = document.getElementById('auto-save-status');
     if (statusEl) {
@@ -4105,14 +4134,17 @@ function triggerAutoSave() {
             return;
         }
 
-        const nickname = dom.calcResultNickname?.value || 'My M.Tech Result';
+        const studentName = dom.calcStudentName?.value || 'Rohit';
+        const nickname = dom.calcResultNickname?.value || 'Main Result';
         const program = dom.calcProgramSelect?.value || 'mtech';
         const department = dom.calcDepartmentSelect?.value || 'cse';
 
         const draft = {
             ownerUid: uid,
-            resultId: state.currentResult.resultId,
-            nickname: nickname.trim(),
+            profileId: state.currentProfile.profileId,
+            studentName: studentName.trim(),
+            calculationId: state.currentCalculation.calculationId,
+            resultNickname: nickname.trim(),
             program,
             department,
             semesters: JSON.parse(JSON.stringify(state.semesters)),
@@ -4180,7 +4212,6 @@ async function initCurrentResultFromDraft(uid) {
                     calculateAndRefresh();
                     render();
                 } else {
-                    // No draft exists — apply predefined courses for default dept
                     if (Object.values(state.semesters).every(a => a.length === 0)) {
                         applyPredefinedCourses();
                         calculateAndRefresh();
@@ -4196,20 +4227,25 @@ async function initCurrentResultFromDraft(uid) {
 
 function _applyDraftToState(d) {
     if (!d) return;
-    state.currentResult.resultId = d.resultId || null;
-    state.currentResult.nickname = d.nickname || 'My M.Tech Result';
-    state.currentResult.program = d.program || 'mtech';
-    state.currentResult.department = d.department || 'cse';
-    state.currentResult.isDirty = false;
+    state.currentProfile.profileId = d.profileId || null;
+    state.currentProfile.studentName = d.studentName || 'Rohit';
+    state.currentProfile.program = d.program || 'mtech';
+    state.currentProfile.department = d.department || 'cse';
+
+    state.currentCalculation.calculationId = d.calculationId || null;
+    state.currentCalculation.resultNickname = d.resultNickname || d.nickname || 'Main Result';
+    state.currentCalculation.isDirty = false;
+
     state.semesters = d.semesters ? JSON.parse(JSON.stringify(d.semesters)) : state.semesters;
     state.selectedSemesters = d.selectedSemesters || state.selectedSemesters;
 
-    if (dom.calcResultNickname) dom.calcResultNickname.value = state.currentResult.nickname;
-    if (dom.calcProgramSelect) dom.calcProgramSelect.value = state.currentResult.program;
-    if (dom.calcDepartmentSelect) dom.calcDepartmentSelect.value = state.currentResult.department;
+    if (dom.calcStudentName) dom.calcStudentName.value = state.currentProfile.studentName;
+    if (dom.calcResultNickname) dom.calcResultNickname.value = state.currentCalculation.resultNickname;
+    if (dom.calcProgramSelect) dom.calcProgramSelect.value = state.currentProfile.program;
+    if (dom.calcDepartmentSelect) dom.calcDepartmentSelect.value = state.currentProfile.department;
+    if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = state.currentProfile.studentName;
 }
 
-// Kept for backward compat (no-op; drafts are saved via triggerAutoSave)
 function loadUserDataFromStorage(uid) {
     initCurrentResultFromDraft(uid);
 }
@@ -4218,7 +4254,6 @@ function saveUserDataToStorage() {
     triggerAutoSave();
 }
 
-// Clear draft from storage (called after saving to History)
 function clearCurrentDraft(uid) {
     if (!uid) return;
     localStorage.removeItem(`nits_draft_${uid}`);
@@ -4231,67 +4266,124 @@ function clearCurrentDraft(uid) {
 }
 
 // ============================================================
-// NEW RESULT FLOW
+// TWO-LEVEL FLOW: STUDENT PROFILE & CALCULATIONS
 // ============================================================
 
-// Starts a fresh current result (with dirty-check)
+// 1. "+ NEW RESULT" -> Creates a brand new Student Profile
 function handleNewResult() {
     const hasCourses = Object.values(state.semesters).some(arr => arr.some(c => c.grade !== ''));
-    const doReset = () => {
-        state.currentResult.resultId = null;
-        state.currentResult.nickname = 'My M.Tech Result';
-        state.currentResult.program = 'mtech';
-        state.currentResult.department = 'cse';
-        state.currentResult.isDirty = false;
+    const doCreate = () => {
+        state.currentProfile = {
+            profileId: null,
+            studentName: 'Rohit',
+            program: 'mtech',
+            department: 'cse'
+        };
+
+        state.currentCalculation = {
+            calculationId: null,
+            resultNickname: 'Main Result',
+            isDirty: false,
+            mode: 'normal'
+        };
 
         ['sem1', 'sem2', 'sem3', 'sem4'].forEach(s => { state.semesters[s] = []; });
         state.selectedSemesters = { sem1: false, sem2: false, sem3: false, sem4: false };
 
-        if (dom.calcResultNickname) dom.calcResultNickname.value = 'My M.Tech Result';
+        if (dom.calcStudentName) dom.calcStudentName.value = 'Rohit';
+        if (dom.calcResultNickname) dom.calcResultNickname.value = 'Main Result';
         if (dom.calcProgramSelect) dom.calcProgramSelect.value = 'mtech';
         if (dom.calcDepartmentSelect) dom.calcDepartmentSelect.value = 'cse';
+        if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = 'Rohit';
 
         applyPredefinedCourses();
         calculateAndRefresh();
         render();
 
-        // Clear auto-save status
         const statusEl = document.getElementById('auto-save-status');
         if (statusEl) statusEl.textContent = '';
 
-        // Navigate to calculator tab
         const calcTab = document.getElementById('nav-calc-btn');
         if (calcTab) calcTab.click();
 
-        showToast('New result started.', 'success');
+        showToast('Started a new Student Profile. Enter profile & result details.', 'info');
     };
 
-    if (hasCourses && state.currentResult.isDirty) {
+    if (hasCourses && state.currentCalculation.isDirty) {
         showConfirmModal(
-            'Start a new result? Unsaved changes to the current result will be cleared. Saved history records will not be affected.',
-            doReset
+            'Create a new Student Profile? Unsaved changes in the active calculation will be cleared. Saved History records will not be affected.',
+            doCreate
         );
     } else {
-        doReset();
+        doCreate();
     }
 }
 
-// Resets current result (wired to the Reset header button)
+// 2. "+ NEW CALCULATION" -> Adds a new calculation under the SAME Student Profile
+function handleNewCalculation() {
+    const studentName = (dom.calcStudentName?.value || state.currentProfile.studentName || 'Rohit').trim();
+    state.currentProfile.studentName = studentName;
+    if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = studentName;
+
+    const hasCourses = Object.values(state.semesters).some(arr => arr.some(c => c.grade !== ''));
+    const doAddCalc = () => {
+        // Keep currentProfile intact (profileId, studentName, program, department)
+        state.currentCalculation = {
+            calculationId: null,
+            resultNickname: 'Supplementary Result',
+            isDirty: false,
+            mode: 'normal'
+        };
+
+        ['sem1', 'sem2', 'sem3', 'sem4'].forEach(s => { state.semesters[s] = []; });
+        state.selectedSemesters = { sem1: false, sem2: false, sem3: false, sem4: false };
+
+        if (dom.calcResultNickname) dom.calcResultNickname.value = 'Supplementary Result';
+
+        applyPredefinedCourses();
+        calculateAndRefresh();
+        render();
+
+        const statusEl = document.getElementById('auto-save-status');
+        if (statusEl) statusEl.textContent = '';
+
+        const calcTab = document.getElementById('nav-calc-btn');
+        if (calcTab) calcTab.click();
+
+        showToast(`New calculation started under profile: ${studentName}`, 'success');
+    };
+
+    if (hasCourses && state.currentCalculation.isDirty) {
+        showConfirmModal(
+            `Add a new calculation under "${studentName}"? Unsaved changes in the current calculation will be cleared.`,
+            doAddCalc
+        );
+    } else {
+        doAddCalc();
+    }
+}
+
+// 3. Resets current active calculation draft (does NOT touch profile or history)
 function resetCurrentResult() {
     showConfirmModal(
-        'Reset current result? Unsaved changes will be cleared. Saved history records will not be affected.',
+        'Reset current calculation? Unsaved grades in this calculation will be cleared. Saved History records and Student Profiles will not be affected.',
         () => {
             const uid = state.auth.user ? state.auth.user.uid : null;
-            handleNewResult._skipDirtyCheck = true;
-            state.currentResult.isDirty = false; // suppress nested confirm
-            handleNewResult();
+            state.currentCalculation.calculationId = null;
+            state.currentCalculation.isDirty = false;
+
+            ['sem1', 'sem2', 'sem3', 'sem4'].forEach(s => { state.semesters[s] = []; });
+            applyPredefinedCourses();
+            calculateAndRefresh();
+            render();
+
             if (uid) clearCurrentDraft(uid);
-            showToast('Current result cleared.', 'success');
+            showToast('Current calculation reset.', 'success');
         }
     );
 }
 
-// Save the current result to History (or update an existing history record if editing)
+// 4. Save current calculation to History under its Student Profile
 async function saveCurrentToHistory() {
     const uid = state.auth.user ? state.auth.user.uid : null;
     if (!uid) {
@@ -4299,118 +4391,168 @@ async function saveCurrentToHistory() {
         return;
     }
 
-    const nickname = (dom.calcResultNickname?.value || '').trim();
-    if (!nickname) {
-        showToast("Please enter a result name before saving.", "warning");
+    const studentName = (dom.calcStudentName?.value || '').trim();
+    if (!studentName) {
+        showToast("Please enter a Student Profile Name before saving.", "warning");
+        if (dom.calcStudentName) dom.calcStudentName.focus();
+        return;
+    }
+
+    const resultNickname = (dom.calcResultNickname?.value || '').trim();
+    if (!resultNickname) {
+        showToast("Please enter a Result Nickname before saving.", "warning");
         if (dom.calcResultNickname) dom.calcResultNickname.focus();
         return;
     }
 
     const program = dom.calcProgramSelect?.value || 'mtech';
     const department = dom.calcDepartmentSelect?.value || 'cse';
+    state.currentProfile.studentName = studentName;
+    state.currentProfile.program = program;
+    state.currentProfile.department = department;
+    state.currentCalculation.resultNickname = resultNickname;
+
     const semestersSnapshot = JSON.parse(JSON.stringify(state.semesters));
 
-    // Calculate summary
+    // Calculate metrics
     const originalSemesters = state.semesters;
     state.semesters = semestersSnapshot;
     const overall = calculateCombined(['sem1', 'sem2', 'sem3', 'sem4']);
     state.semesters = originalSemesters;
 
-    const record = {
-        ownerUid: uid,
-        ownerEmail: state.auth.user.email || '',
-        ownerDisplayName: state.auth.user.displayName || '',
-        nickname,
-        program,
-        department,
-        semesters: semestersSnapshot,
-        summary: {
-            overallCGPA: overall.cgpa,
-            percentage: overall.percentage,
-            totalCredits: overall.totalCredits,
-            activeBacklogs: overall.backlogs
-        },
-        calculationMethod: state.calculationMethod,
-        recordType: 'own',
-        sourceType: 'own',
-        version: 1,
-        updatedAt: Date.now()
+    const summary = {
+        overallCGPA: overall.cgpa,
+        percentage: overall.percentage,
+        totalCredits: overall.totalCredits,
+        activeBacklogs: overall.backlogs
     };
 
     try {
         if (state.auth.mode === 'firebase') {
             const db = getFirebaseDb();
             if (db) {
-                if (state.currentResult.resultId) {
-                    // Editing an existing record — update it
-                    const existingRec = stateHistory.find(r => r.id === state.currentResult.resultId);
-                    record.createdAt = existingRec?.createdAt || serverTimestamp();
-                    record.version = (existingRec?.version || 1) + 1;
-                    await setDoc(doc(db, 'users', uid, 'history', state.currentResult.resultId), {
-                        ...record,
-                        updatedAt: serverTimestamp()
-                    });
-                    showToast('History record updated successfully.', 'success');
-                } else {
-                    // New record
-                    record.createdAt = serverTimestamp();
-                    await addDoc(collection(db, 'users', uid, 'history'), {
-                        ...record,
+                // STEP A: Ensure Student Profile Document exists
+                let profileId = state.currentProfile.profileId;
+
+                // Look up if profile with matching name exists in local history if profileId not set
+                if (!profileId) {
+                    const existingProf = stateProfileHistory.find(p => p.studentName.toLowerCase() === studentName.toLowerCase() && p.program === program && p.department === department);
+                    if (existingProf) {
+                        profileId = existingProf.profileId;
+                    }
+                }
+
+                if (!profileId) {
+                    const profRef = await addDoc(collection(db, "users", uid, "resultProfiles"), {
+                        ownerUid: uid,
+                        studentName,
+                        program,
+                        department,
                         createdAt: serverTimestamp(),
                         updatedAt: serverTimestamp()
                     });
-                    showToast('Result saved to History!', 'success');
+                    profileId = profRef.id;
+                } else {
+                    await setDoc(doc(db, "users", uid, "resultProfiles", profileId), {
+                        studentName,
+                        program,
+                        department,
+                        updatedAt: serverTimestamp()
+                    }, { merge: true });
+                }
+                state.currentProfile.profileId = profileId;
+
+                // STEP B: Save Calculation Document under profile's calculations subcollection
+                let calcId = state.currentCalculation.calculationId;
+                const calcPayload = {
+                    profileId,
+                    ownerUid: uid,
+                    resultNickname,
+                    program,
+                    department,
+                    semesters: semestersSnapshot,
+                    summary,
+                    calculationMethod: state.calculationMethod,
+                    mode: dom.calcLockStructure?.checked ? 'normal' : 'advanced',
+                    updatedAt: serverTimestamp()
+                };
+
+                if (calcId) {
+                    await setDoc(doc(db, "users", uid, "resultProfiles", profileId, "calculations", calcId), calcPayload, { merge: true });
+                    showToast(`Calculation "${resultNickname}" updated under profile "${studentName}".`, "success");
+                } else {
+                    calcPayload.createdAt = serverTimestamp();
+                    const calcRef = await addDoc(collection(db, "users", uid, "resultProfiles", profileId, "calculations"), calcPayload);
+                    state.currentCalculation.calculationId = calcRef.id;
+                    showToast(`Saved calculation "${resultNickname}" under profile "${studentName}".`, "success");
                 }
             }
         } else {
-            // Mock mode
-            const mockHist = JSON.parse(localStorage.getItem(`nits_mock_history_${uid}`) || '[]');
-            if (state.currentResult.resultId) {
-                const idx = mockHist.findIndex(r => r.id === state.currentResult.resultId);
-                if (idx !== -1) {
-                    record.id = state.currentResult.resultId;
-                    record.version = (mockHist[idx].version || 1) + 1;
-                    mockHist[idx] = record;
-                } else {
-                    record.id = 'hist_' + Date.now();
-                    mockHist.unshift(record);
-                }
+            // Mock Mode
+            let mockProfiles = JSON.parse(localStorage.getItem(`nits_mock_result_profiles_${uid}`) || '[]');
+            let profileId = state.currentProfile.profileId;
+            let existingProf = mockProfiles.find(p => (profileId && p.profileId === profileId) || (p.studentName.toLowerCase() === studentName.toLowerCase() && p.program === program && p.department === department));
+
+            if (!existingProf) {
+                profileId = 'prof_' + Date.now();
+                existingProf = {
+                    profileId,
+                    studentName,
+                    program,
+                    department,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                    calculations: []
+                };
+                mockProfiles.unshift(existingProf);
             } else {
-                record.id = 'hist_' + Date.now();
-                record.createdAt = Date.now();
-                mockHist.unshift(record);
+                existingProf.studentName = studentName;
+                existingProf.updatedAt = Date.now();
+                profileId = existingProf.profileId;
             }
-            localStorage.setItem(`nits_mock_history_${uid}`, JSON.stringify(mockHist));
-            showToast('Result saved to History!', 'success');
+            state.currentProfile.profileId = profileId;
+
+            let calcId = state.currentCalculation.calculationId || ('calc_' + Date.now());
+            state.currentCalculation.calculationId = calcId;
+
+            const existingCalcIdx = (existingProf.calculations || []).findIndex(c => c.calculationId === calcId);
+            const calcObj = {
+                calculationId: calcId,
+                profileId,
+                resultNickname,
+                program,
+                department,
+                semesters: semestersSnapshot,
+                summary,
+                calculationMethod: state.calculationMethod,
+                mode: dom.calcLockStructure?.checked ? 'normal' : 'advanced',
+                createdAt: existingCalcIdx !== -1 ? existingProf.calculations[existingCalcIdx].createdAt : Date.now(),
+                updatedAt: Date.now()
+            };
+
+            if (existingCalcIdx !== -1) {
+                existingProf.calculations[existingCalcIdx] = calcObj;
+            } else {
+                existingProf.calculations.unshift(calcObj);
+            }
+
+            localStorage.setItem(`nits_mock_result_profiles_${uid}`, JSON.stringify(mockProfiles));
+            showToast(`Mock: Saved calculation "${resultNickname}" under "${studentName}".`, "success");
         }
 
-        // Clear draft and reset to new state
         clearCurrentDraft(uid);
-        state.currentResult.isDirty = false;
-
-        // Reset calculator to clean state for next entry
-        state.currentResult.resultId = null;
-        state.currentResult.nickname = 'My M.Tech Result';
-        state.currentResult.program = 'mtech';
-        state.currentResult.department = 'cse';
-        ['sem1', 'sem2', 'sem3', 'sem4'].forEach(s => { state.semesters[s] = []; });
-        if (dom.calcResultNickname) dom.calcResultNickname.value = 'My M.Tech Result';
-        if (dom.calcProgramSelect) dom.calcProgramSelect.value = 'mtech';
-        if (dom.calcDepartmentSelect) dom.calcDepartmentSelect.value = 'cse';
-        applyPredefinedCourses();
-        calculateAndRefresh();
-        render();
+        state.currentCalculation.isDirty = false;
 
         const statusEl = document.getElementById('auto-save-status');
         if (statusEl) { statusEl.textContent = 'Saved to History ✓'; statusEl.style.color = 'var(--success)'; }
 
-        // Reload history list
         await loadHistoryFromDb();
     } catch (err) {
         console.error("Error saving to history:", err);
-        showToast("Error saving: " + err.message, "error");
+        showToast("Error saving calculation: " + err.message, "error");
     }
 }
+
 
 
 function showAuthView(view) {
@@ -4885,11 +5027,13 @@ window.initHistorySystem = function() {
     }
 };
 
-// Fetch user history documents from database
+let stateProfileHistory = [];
+
+// Fetch user student profiles and their nested calculations from database
 window.loadHistoryFromDb = async function() {
     const uid = state.auth.user ? state.auth.user.uid : null;
     if (!uid) {
-        stateHistory = [];
+        stateProfileHistory = [];
         renderHistoryList();
         return;
     }
@@ -4898,278 +5042,187 @@ window.loadHistoryFromDb = async function() {
         const db = getFirebaseDb();
         if (db) {
             try {
-                // Fetch nicknames first
-                const nickSnap = await getDocs(collection(db, "users", uid, "nicknames"));
-                const nickMap = {};
-                nickSnap.forEach(d => {
-                    nickMap[d.id] = d.data().nickname;
-                });
+                const profilesList = [];
+                const profSnap = await getDocs(collection(db, "users", uid, "resultProfiles"));
                 
-                // Fetch history records
-                const q = query(collection(db, "users", uid, "history"), orderBy("createdAt", "desc"));
-                const historySnap = await getDocs(q);
-                const items = [];
-                historySnap.forEach(docSnap => {
-                    const data = docSnap.data();
-                    items.push({
-                        id: docSnap.id,
-                        ...data,
-                        nickname: nickMap[data.studentId] || data.nickname || ''
+                for (const profDoc of profSnap.docs) {
+                    const profData = profDoc.data();
+                    const calcSnap = await getDocs(query(collection(db, "users", uid, "resultProfiles", profDoc.id, "calculations"), orderBy("updatedAt", "desc")));
+                    
+                    const calculations = [];
+                    calcSnap.forEach(cDoc => {
+                        calculations.push({
+                            calculationId: cDoc.id,
+                            ...cDoc.data()
+                        });
                     });
-                });
-                stateHistory = items;
+                    
+                    profilesList.push({
+                        profileId: profDoc.id,
+                        ...profData,
+                        studentName: profData.studentName || 'Rohit',
+                        program: profData.program || 'mtech',
+                        department: profData.department || 'cse',
+                        calculations
+                    });
+                }
+
+                // BACKWARD COMPATIBILITY: Fetch any legacy flat history records from users/{uid}/history
+                try {
+                    const legacySnap = await getDocs(query(collection(db, "users", uid, "history"), orderBy("createdAt", "desc")));
+                    if (!legacySnap.empty) {
+                        const legacyCalcs = [];
+                        legacySnap.forEach(lDoc => {
+                            const d = lDoc.data();
+                            legacyCalcs.push({
+                                calculationId: lDoc.id,
+                                profileId: 'legacy_prof',
+                                resultNickname: d.nickname || 'Legacy Result',
+                                program: d.program || 'mtech',
+                                department: d.department || 'cse',
+                                semesters: d.semesters,
+                                summary: d.summary,
+                                calculationMethod: d.calculationMethod,
+                                createdAt: d.createdAt,
+                                updatedAt: d.updatedAt,
+                                isLegacy: true
+                            });
+                        });
+                        
+                        if (legacyCalcs.length > 0) {
+                            profilesList.push({
+                                profileId: 'legacy_prof',
+                                studentName: 'Saved Snapshots (Legacy)',
+                                program: 'mtech',
+                                department: 'cse',
+                                calculations: legacyCalcs
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Legacy history read warning:", e);
+                }
+
+                stateProfileHistory = profilesList;
                 renderHistoryList();
             } catch (err) {
-                console.error("Error loading history from Firestore:", err);
+                console.error("Error loading profiles and calculations from Firestore:", err);
             }
         }
     } else {
         // Mock Mode
-        const mockHist = localStorage.getItem(`nits_mock_history_${uid}`);
-        stateHistory = mockHist ? JSON.parse(mockHist) : [];
+        const mockData = localStorage.getItem(`nits_mock_result_profiles_${uid}`);
+        stateProfileHistory = mockData ? JSON.parse(mockData) : [];
         renderHistoryList();
     }
 };
 
-// Save a brand new history snapshot to DB
-async function saveHistoryRecord(nickname, name, roll, sourceType, semestersOverride = null) {
-    const uid = state.auth.user ? state.auth.user.uid : null;
-    if (!uid) {
-        showToast("Please login to save records.", "error");
-        return;
-    }
-    
-    const semestersSnapshot = semestersOverride || JSON.parse(JSON.stringify(state.semesters));
-    
-    // Pull program and department from active profile
-    const activeProf = state.profiles.find(p => p.id === state.activeProfileId);
-    const program = activeProf?.program || 'mtech';
-    const department = activeProf?.department || 'cse';
-
-    // Temporarily replace semesters to calculate metrics
-    const originalSemesters = state.semesters;
-    state.semesters = semestersSnapshot;
-    const overall = calculateCombined(['sem1', 'sem2', 'sem3', 'sem4']);
-    state.semesters = originalSemesters; 
-    
-    const record = {
-        ownerUid: uid,
-        ownerEmail: state.auth.user.email || '',
-        ownerDisplayName: state.auth.user.displayName || '',
-        nickname: nickname.trim(),
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        recordType: sourceType, 
-        sourceType: sourceType, 
-        program,
-        department,
-        semesters: semestersSnapshot,
-        summary: {
-            overallCGPA: overall.cgpa,
-            percentage: overall.percentage,
-            totalCredits: overall.totalCredits,
-            activeBacklogs: overall.backlogs
-        },
-        calculationMethod: state.calculationMethod,
-        version: 1
-    };
-
-    try {
-        if (state.auth.mode === 'firebase') {
-            const db = getFirebaseDb();
-            if (db) {
-                // Save Snapshot History — always addDoc (immutable snapshot)
-                const docRef = await addDoc(collection(db, "users", uid, "history"), {
-                    ...record,
-                    createdAt: serverTimestamp(),
-                    updatedAt: serverTimestamp()
-                });
-                record.id = docRef.id;
-                showToast("Snapshot saved to history successfully.", "success");
-            }
-        } else {
-            // Mock Mode
-            const mockHist = JSON.parse(localStorage.getItem(`nits_mock_history_${uid}`) || '[]');
-            record.id = 'hist_' + Date.now();
-            mockHist.unshift(record);
-            localStorage.setItem(`nits_mock_history_${uid}`, JSON.stringify(mockHist));
-            showToast("Snapshot saved to mock history successfully.", "success");
-        }
-        
-        pendingSavePublicRecord = null;
-        dom.saveHistoryModal.style.display = 'none';
-        await loadHistoryFromDb();
-    } catch (err) {
-        console.error("Error saving history snapshot:", err);
-        showToast("Error saving snapshot: " + err.message, "error");
-    }
-}
-
-// Update / Save as New history snapshots
-async function updateHistoryRecord(recordId, nickname, name, roll, semestersSnapshot, saveAsNew = false) {
+// Delete a calculation inside a profile
+async function deleteCalculationRecord(profileId, calculationId) {
     const uid = state.auth.user ? state.auth.user.uid : null;
     if (!uid) return;
     
-    // Recalculate metrics
-    const originalSemesters = state.semesters;
-    state.semesters = semestersSnapshot;
-    const overall = calculateCombined(['sem1', 'sem2', 'sem3', 'sem4']);
-    state.semesters = originalSemesters;
-    
-    const existingRecord = stateHistory.find(r => r.id === recordId);
-    if (!existingRecord && !saveAsNew) {
-        showToast("Original snapshot not found.", "error");
-        return;
-    }
-    
-    const newVersion = saveAsNew ? 1 : ((existingRecord.version || 1) + 1);
-    
-    const record = {
-        ownerUid: uid,
-        ownerEmail: state.auth.user.email || '',
-        ownerDisplayName: state.auth.user.displayName || '',
-        nickname: nickname.trim(),
-        updatedAt: Date.now(),
-        studentId: roll.trim(),
-        studentName: name.trim(),
-        semesters: semestersSnapshot,
-        summary: {
-            overallCGPA: overall.cgpa,
-            percentage: overall.percentage,
-            totalCredits: overall.totalCredits,
-            activeBacklogs: overall.backlogs
-        },
-        calculationMethod: state.calculationMethod,
-        version: newVersion
-    };
-    
-    if (saveAsNew) {
-        record.createdAt = Date.now();
-        record.sourceType = existingRecord ? existingRecord.sourceType : 'own';
-    } else {
-        record.createdAt = existingRecord.createdAt || Date.now();
-        record.sourceType = existingRecord.sourceType || 'own';
-    }
-    
-    if (record.sourceType === 'viewed') {
-        record.viewedStudentId = roll.trim();
-        record.viewedStudentName = name.trim();
-        record.viewerUid = uid;
-    }
-    
-    try {
-        if (state.auth.mode === 'firebase') {
-            const db = getFirebaseDb();
-            if (db) {
-                // 1. Private Nickname Update
-                if (nickname.trim()) {
-                    await setDoc(doc(db, "users", uid, "nicknames", roll.trim()), {
-                        nickname: nickname.trim(),
-                        updatedAt: serverTimestamp()
-                    });
-                } else {
-                    // Remove nickname if cleared
-                    await deleteDoc(doc(db, "users", uid, "nicknames", roll.trim()));
-                }
-                
-                // 2. History Document Update
-                if (saveAsNew) {
-                    await addDoc(collection(db, "users", uid, "history"), {
-                        ...record,
-                        createdAt: serverTimestamp(),
-                        updatedAt: serverTimestamp()
-                    });
-                    showToast("Snapshot saved as new history record.", "success");
-                } else {
-                    await setDoc(doc(db, "users", uid, "history", recordId), {
-                        ...record,
-                        updatedAt: serverTimestamp()
-                    });
-                    showToast("History record updated successfully.", "success");
-                }
-                
-                // 3. Public profile copy updates if own record
-                if (record.sourceType === 'own') {
-                    await setDoc(doc(db, "publicProfiles", roll.trim()), {
-                        studentId: roll.trim(),
-                        studentName: name.trim(),
-                        semesters: semestersSnapshot,
-                        summary: record.summary,
-                        ownerUid: uid,
-                        updatedAt: serverTimestamp()
-                    });
-                }
-            }
-        } else {
-            // Mock Mode
-            if (nickname.trim()) {
-                const mockNicks = JSON.parse(localStorage.getItem(`nits_mock_nicknames_${uid}`) || '{}');
-                mockNicks[roll.trim()] = nickname.trim();
-                localStorage.setItem(`nits_mock_nicknames_${uid}`, JSON.stringify(mockNicks));
-            }
-            
-            const mockHist = JSON.parse(localStorage.getItem(`nits_mock_history_${uid}`) || '[]');
-            if (saveAsNew) {
-                record.id = 'hist_' + Date.now();
-                mockHist.unshift(record);
-                showToast("Snapshot saved as new mock history record.", "success");
-            } else {
-                const idx = mockHist.findIndex(r => r.id === recordId);
-                if (idx !== -1) {
-                    record.id = recordId;
-                    mockHist[idx] = record;
-                    showToast("Mock history record updated successfully.", "success");
-                }
-            }
-            localStorage.setItem(`nits_mock_history_${uid}`, JSON.stringify(mockHist));
-            
-            if (record.sourceType === 'own') {
-                const publicProfiles = JSON.parse(localStorage.getItem('nits_mock_public_profiles') || '{}');
-                publicProfiles[roll.trim()] = {
-                    studentId: roll.trim(),
-                    studentName: name.trim(),
-                    semesters: semestersSnapshot,
-                    summary: record.summary,
-                    ownerUid: uid
-                };
-                localStorage.setItem('nits_mock_public_profiles', JSON.stringify(publicProfiles));
-            }
-        }
-        
-        dom.historyEditModal.style.display = 'none';
-        await loadHistoryFromDb();
-    } catch (err) {
-        console.error("Error updating history:", err);
-        showToast("Error updating history record: " + err.message, "error");
-    }
-}
-
-// Delete snapshots from user history
-async function deleteHistoryRecord(recordId) {
-    const uid = state.auth.user ? state.auth.user.uid : null;
-    if (!uid) return;
-    
-    showConfirmModal("Delete this history record? This will permanently remove this saved record from your history.", async () => {
+    showConfirmModal("Delete this calculation? This will permanently remove this saved calculation record.", async () => {
         try {
             if (state.auth.mode === 'firebase') {
                 const db = getFirebaseDb();
                 if (db) {
-                    await deleteDoc(doc(db, "users", uid, "history", recordId));
-                    showToast("History record deleted.", "success");
+                    if (profileId === 'legacy_prof') {
+                        await deleteDoc(doc(db, "users", uid, "history", calculationId));
+                    } else {
+                        await deleteDoc(doc(db, "users", uid, "resultProfiles", profileId, "calculations", calculationId));
+                    }
+                    showToast("Calculation deleted.", "success");
                 }
             } else {
-                // Mock Mode
-                const mockHist = JSON.parse(localStorage.getItem(`nits_mock_history_${uid}`) || '[]');
-                const filtered = mockHist.filter(r => r.id !== recordId);
-                localStorage.setItem(`nits_mock_history_${uid}`, JSON.stringify(filtered));
-                showToast("Mock history record deleted.", "success");
+                let mockProfiles = JSON.parse(localStorage.getItem(`nits_mock_result_profiles_${uid}`) || '[]');
+                const prof = mockProfiles.find(p => p.profileId === profileId);
+                if (prof) {
+                    prof.calculations = (prof.calculations || []).filter(c => c.calculationId !== calculationId);
+                }
+                localStorage.setItem(`nits_mock_result_profiles_${uid}`, JSON.stringify(mockProfiles));
+                showToast("Mock calculation deleted.", "success");
             }
             await loadHistoryFromDb();
         } catch (err) {
-            console.error("Error deleting history record:", err);
-            showToast("Failed to delete record: " + err.message, "error");
+            console.error("Error deleting calculation record:", err);
+            showToast("Failed to delete calculation: " + err.message, "error");
         }
     });
+}
+
+// Delete an entire student profile and all its calculations
+async function deleteProfileRecord(profileId, studentName) {
+    const uid = state.auth.user ? state.auth.user.uid : null;
+    if (!uid) return;
+
+    showConfirmModal(`Delete profile "${studentName}" and all of its calculation records?`, async () => {
+        try {
+            if (state.auth.mode === 'firebase') {
+                const db = getFirebaseDb();
+                if (db && profileId !== 'legacy_prof') {
+                    // Delete nested calculations
+                    const calcSnap = await getDocs(collection(db, "users", uid, "resultProfiles", profileId, "calculations"));
+                    for (const cDoc of calcSnap.docs) {
+                        await deleteDoc(doc(db, "users", uid, "resultProfiles", profileId, "calculations", cDoc.id));
+                    }
+                    await deleteDoc(doc(db, "users", uid, "resultProfiles", profileId));
+                    showToast(`Profile "${studentName}" deleted.`, "success");
+                }
+            } else {
+                let mockProfiles = JSON.parse(localStorage.getItem(`nits_mock_result_profiles_${uid}`) || '[]');
+                mockProfiles = mockProfiles.filter(p => p.profileId !== profileId);
+                localStorage.setItem(`nits_mock_result_profiles_${uid}`, JSON.stringify(mockProfiles));
+                showToast(`Profile "${studentName}" deleted.`, "success");
+            }
+            await loadHistoryFromDb();
+        } catch (err) {
+            console.error("Error deleting profile record:", err);
+            showToast("Failed to delete profile: " + err.message, "error");
+        }
+    });
+}
+
+// Edit Student Profile Name
+async function renameProfileRecord(profileId, currentName) {
+    const uid = state.auth.user ? state.auth.user.uid : null;
+    if (!uid) return;
+
+    const newName = prompt("Enter new Student Profile Name:", currentName);
+    if (!newName || !newName.trim() || newName.trim() === currentName) return;
+
+    const updatedName = newName.trim();
+    try {
+        if (state.auth.mode === 'firebase') {
+            const db = getFirebaseDb();
+            if (db && profileId !== 'legacy_prof') {
+                await setDoc(doc(db, "users", uid, "resultProfiles", profileId), {
+                    studentName: updatedName,
+                    updatedAt: serverTimestamp()
+                }, { merge: true });
+                showToast(`Profile renamed to "${updatedName}".`, "success");
+            }
+        } else {
+            let mockProfiles = JSON.parse(localStorage.getItem(`nits_mock_result_profiles_${uid}`) || '[]');
+            const prof = mockProfiles.find(p => p.profileId === profileId);
+            if (prof) {
+                prof.studentName = updatedName;
+            }
+            localStorage.setItem(`nits_mock_result_profiles_${uid}`, JSON.stringify(mockProfiles));
+            showToast(`Profile renamed to "${updatedName}".`, "success");
+        }
+
+        if (state.currentProfile.profileId === profileId) {
+            state.currentProfile.studentName = updatedName;
+            if (dom.calcStudentName) dom.calcStudentName.value = updatedName;
+            if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = updatedName;
+        }
+
+        await loadHistoryFromDb();
+    } catch (err) {
+        console.error("Error renaming profile:", err);
+        showToast("Error renaming profile: " + err.message, "error");
+    }
 }
 
 function formatAcademicDate(timestamp) {
@@ -5192,116 +5245,201 @@ function formatAcademicDate(timestamp) {
     });
 }
 
+// Render History Grouped by Student Profile
 function renderHistoryList() {
     const container = dom.historyItemsContainer;
     container.innerHTML = '';
     
-    const searchQuery = dom.historySearchInput.value.toLowerCase().trim();
-    const filterType = dom.historyFilterType.value;
-    const sortVal = dom.historySort.value;
+    const searchQuery = dom.historySearchInput ? dom.historySearchInput.value.toLowerCase().trim() : '';
     
-    let filtered = [...stateHistory];
+    let profilesToRender = [...stateProfileHistory];
     
-    // 1. Search Query filter matching
+    // Filter profiles matching search query
     if (searchQuery) {
-        filtered = filtered.filter(item => {
-            const matchesNick = (item.nickname || '').toLowerCase().includes(searchQuery);
-            const matchesProg = (item.program || '').toLowerCase().includes(searchQuery);
-            const matchesDept = (item.department || '').toLowerCase().includes(searchQuery);
+        profilesToRender = profilesToRender.filter(prof => {
+            const matchesProfName = (prof.studentName || '').toLowerCase().includes(searchQuery);
+            const matchesProg = (prof.program || '').toLowerCase().includes(searchQuery);
+            const matchesDept = (prof.department || '').toLowerCase().includes(searchQuery);
             
-            let matchesCourses = false;
-            if (item.semesters) {
-                Object.keys(item.semesters).forEach(semKey => {
-                    const courses = item.semesters[semKey] || [];
-                    courses.forEach(c => {
-                        if ((c.code || '').toLowerCase().includes(searchQuery) || (c.subject || '').toLowerCase().includes(searchQuery)) {
-                            matchesCourses = true;
-                        }
-                    });
-                });
-            }
+            const matchesCalcs = (prof.calculations || []).some(calc => {
+                return (calc.resultNickname || '').toLowerCase().includes(searchQuery);
+            });
             
-            return matchesNick || matchesProg || matchesDept || matchesCourses;
+            return matchesProfName || matchesProg || matchesDept || matchesCalcs;
         });
     }
+
+    // Filter profiles that have calculations
+    profilesToRender = profilesToRender.filter(prof => prof.calculations && prof.calculations.length > 0);
     
-    // 2. Filter Types
-    if (filterType === 'own') {
-        filtered = filtered.filter(item => item.recordType === 'own' || item.sourceType === 'own');
-    } else if (filterType === 'other' || filterType === 'viewed') {
-        filtered = filtered.filter(item => item.recordType === 'other' || item.sourceType === 'viewed');
-    }
-    
-    // 3. Sorting options
-    if (sortVal === 'newest') {
-        filtered.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
-    } else if (sortVal === 'oldest') {
-        filtered.sort((a, b) => new Date(a.createdAt || a.updatedAt || 0) - new Date(b.createdAt || b.updatedAt || 0));
-    } else if (sortVal === 'name') {
-        filtered.sort((a, b) => (a.nickname || '').localeCompare(b.nickname || ''));
-    }
-    
-    if (filtered.length === 0) {
+    if (profilesToRender.length === 0) {
         container.style.display = 'none';
-        dom.historyEmptyState.style.display = 'block';
+        if (dom.historyEmptyState) dom.historyEmptyState.style.display = 'block';
         return;
     }
     
     container.style.display = 'flex';
-    dom.historyEmptyState.style.display = 'none';
+    container.style.flexDirection = 'column';
+    container.style.gap = '16px';
+    if (dom.historyEmptyState) dom.historyEmptyState.style.display = 'none';
     
-    filtered.forEach(record => {
-        const div = document.createElement('div');
-        div.className = 'history-card';
-        
-        const isOwn = record.recordType === 'own' || record.sourceType === 'own';
-        const badgeClass = isOwn ? 'badge-own' : 'badge-viewed';
-        const badgeLabel = isOwn ? 'MY RESULT' : 'OTHER RESULT';
-        
-        const displayLabel = record.nickname || (isOwn ? 'My M.Tech Result' : 'Academic Result');
-        const progName = record.program ? (ACADEMIC_PROGRAMS[record.program]?.name || record.program) : 'M.Tech';
-        const deptName = record.department ? (ACADEMIC_PROGRAMS.mtech?.departments[record.department]?.name || record.department) : 'Computer Science and Engineering';
-        const subtitleText = `${progName} • ${deptName}`;
+    profilesToRender.forEach(prof => {
+        const profCard = document.createElement('div');
+        profCard.className = 'history-card profile-group-card';
+        profCard.style.border = '1.5px solid var(--border)';
+        profCard.style.borderRadius = 'var(--r-md)';
+        profCard.style.background = 'var(--surface)';
+        profCard.style.boxShadow = 'var(--shadow-sm)';
+        profCard.style.padding = '16px';
 
-        const sum = record.summary || {};
-        const cgpaStr = sum.overallCGPA !== undefined && sum.overallCGPA !== null ? sum.overallCGPA.toFixed(2) : '—';
-        const creditsStr = sum.totalCredits !== undefined && sum.totalCredits !== null ? String(sum.totalCredits) : '—';
-        const backlogsStr = sum.activeBacklogs !== undefined && sum.activeBacklogs !== null ? String(sum.activeBacklogs) : '—';
-        
-        const updatedDate = formatAcademicDate(record.updatedAt || record.createdAt);
-        
-        div.innerHTML = `
-            <div class="history-card-header">
+        const progName = prof.program ? (ACADEMIC_PROGRAMS[prof.program]?.name || prof.program) : 'M.Tech';
+        const deptName = prof.department ? (ACADEMIC_PROGRAMS.mtech?.departments[prof.department]?.name || prof.department) : 'Computer Science and Engineering';
+        const calcCount = (prof.calculations || []).length;
+        const calcCountLabel = `${calcCount} ${calcCount === 1 ? 'Calculation' : 'Calculations'}`;
+
+        profCard.innerHTML = `
+            <div class="profile-card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:12px;">
                 <div>
-                    <h4 class="history-card-title">${displayLabel}</h4>
-                    <p class="history-card-subtitle">${subtitleText}</p>
+                    <h3 style="font-size:1.1rem; font-weight:800; color:var(--text-main, var(--text)); margin:0; display:flex; align-items:center; gap:8px;">
+                        <span>${prof.studentName || 'Student Profile'}</span>
+                        <button type="button" class="history-action-btn edit-prof-name-btn" style="padding:2px 6px; font-size:0.75rem;" title="Rename Profile">✏️ Edit Name</button>
+                    </h3>
+                    <p style="font-size:0.8rem; color:var(--muted); margin:4px 0 0 0;">${progName} • ${deptName}</p>
                 </div>
-                <span class="history-card-badge ${badgeClass}">${badgeLabel}</span>
-            </div>
-            <div class="history-card-grid">
-                <div class="history-card-metric">CGPA: <strong>${cgpaStr}</strong></div>
-                <div class="history-card-metric">Credits: <strong>${creditsStr}</strong></div>
-                <div class="history-card-metric">Backlogs: <strong>${backlogsStr}</strong></div>
-            </div>
-            <div class="history-card-footer">
-                <span class="history-card-date">Updated: ${updatedDate} | v${record.version || 1}</span>
-                <div class="history-card-actions">
-                    <button type="button" class="history-action-btn view-hist-btn" data-id="${record.id}">View</button>
-                    <button type="button" class="history-action-btn edit-hist-btn" data-id="${record.id}" style="background-color: var(--primary); color: white;">Edit in Calculator</button>
-                    <button type="button" class="history-action-btn report-hist-btn" data-id="${record.id}">Download PDF</button>
-                    <button type="button" class="history-action-btn history-action-btn-danger delete-hist-btn" data-id="${record.id}">Delete</button>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="history-card-badge badge-own" style="background:var(--primary-light, #eef2ff); color:var(--primary); font-weight:700;">${calcCountLabel}</span>
+                    <button type="button" class="btn btn-secondary btn-sm toggle-calc-list-btn" style="font-size:0.8rem; padding:4px 10px;">View Results ▼</button>
+                    ${prof.profileId !== 'legacy_prof' ? `<button type="button" class="history-action-btn history-action-btn-danger delete-prof-btn" style="padding:4px 8px; font-size:0.75rem;" title="Delete Profile">&times; Delete Profile</button>` : ''}
                 </div>
+            </div>
+            
+            <div class="profile-calc-list" style="display:flex; flex-direction:column; gap:10px;">
+                ${prof.calculations.map(calc => {
+                    const sum = calc.summary || {};
+                    const cgpaStr = sum.overallCGPA !== undefined && sum.overallCGPA !== null ? Number(sum.overallCGPA).toFixed(2) : '—';
+                    const creditsStr = sum.totalCredits !== undefined && sum.totalCredits !== null ? String(sum.totalCredits) : '—';
+                    const backlogsStr = sum.activeBacklogs !== undefined && sum.activeBacklogs !== null ? String(sum.activeBacklogs) : '—';
+                    const updatedDate = formatAcademicDate(calc.updatedAt || calc.createdAt);
+                    
+                    return `
+                        <div class="calculation-item-row" data-calc-id="${calc.calculationId}" style="background:var(--background); border:1px solid var(--border); padding:12px 14px; border-radius:var(--r-sm); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                            <div>
+                                <h4 style="font-size:0.92rem; font-weight:700; color:var(--text-main, var(--text)); margin:0 0 4px 0;">${calc.resultNickname || 'Calculation'}</h4>
+                                <div style="display:flex; gap:12px; font-size:0.8rem; color:var(--muted); flex-wrap:wrap;">
+                                    <span>CGPA: <strong style="color:var(--primary); font-weight:700;">${cgpaStr}</strong></span>
+                                    <span>Credits: <strong>${creditsStr}</strong></span>
+                                    <span>Backlogs: <strong>${backlogsStr}</strong></span>
+                                    <span>Updated: ${updatedDate}</span>
+                                </div>
+                            </div>
+                            <div class="history-card-actions" style="display:flex; gap:6px; flex-wrap:wrap;">
+                                <button type="button" class="history-action-btn view-calc-btn" data-id="${calc.calculationId}">View</button>
+                                <button type="button" class="history-action-btn edit-calc-btn" data-id="${calc.calculationId}" style="background-color:var(--primary); color:white; border-color:var(--primary);">Edit in Calculator</button>
+                                <button type="button" class="history-action-btn report-calc-btn" data-id="${calc.calculationId}">Download PDF</button>
+                                <button type="button" class="history-action-btn history-action-btn-danger delete-calc-btn" data-id="${calc.calculationId}">Delete</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
             </div>
         `;
+
+        // Bind Profile Card Header buttons
+        profCard.querySelector('.edit-prof-name-btn').addEventListener('click', () => renameProfileRecord(prof.profileId, prof.studentName));
         
-        div.querySelector('.view-hist-btn').addEventListener('click', () => openHistoryDetail(record));
-        div.querySelector('.edit-hist-btn').addEventListener('click', () => loadHistoryIntoCalculator(record));
-        div.querySelector('.report-hist-btn').addEventListener('click', () => openHistoryReport(record));
-        div.querySelector('.delete-hist-btn').addEventListener('click', () => deleteHistoryRecord(record.id));
-        
-        container.appendChild(div);
+        const deleteProfBtn = profCard.querySelector('.delete-prof-btn');
+        if (deleteProfBtn) {
+            deleteProfBtn.addEventListener('click', () => deleteProfileRecord(prof.profileId, prof.studentName));
+        }
+
+        const calcListEl = profCard.querySelector('.profile-calc-list');
+        const toggleBtn = profCard.querySelector('.toggle-calc-list-btn');
+        toggleBtn.addEventListener('click', () => {
+            const isHidden = calcListEl.style.display === 'none';
+            calcListEl.style.display = isHidden ? 'flex' : 'none';
+            toggleBtn.textContent = isHidden ? 'View Results ▼' : 'Hide Results ▲';
+        });
+
+        // Bind Calculation item buttons
+        prof.calculations.forEach(calc => {
+            const rowEl = profCard.querySelector(`.calculation-item-row[data-calc-id="${calc.calculationId}"]`);
+            if (!rowEl) return;
+
+            rowEl.querySelector('.view-calc-btn').addEventListener('click', () => {
+                openHistoryDetail({
+                    ...calc,
+                    nickname: calc.resultNickname,
+                    studentName: prof.studentName
+                });
+            });
+
+            rowEl.querySelector('.edit-calc-btn').addEventListener('click', () => {
+                loadCalculationIntoCalculator(prof, calc);
+            });
+
+            rowEl.querySelector('.report-calc-btn').addEventListener('click', () => {
+                downloadReportPDF({
+                    ...calc,
+                    nickname: `${prof.studentName} — ${calc.resultNickname}`
+                });
+            });
+
+            rowEl.querySelector('.delete-calc-btn').addEventListener('click', () => {
+                deleteCalculationRecord(prof.profileId, calc.calculationId);
+            });
+        });
+
+        container.appendChild(profCard);
     });
 }
+
+// Load a specific calculation into the calculator workspace
+function loadCalculationIntoCalculator(prof, calc) {
+    const doLoad = () => {
+        state.currentProfile = {
+            profileId: prof.profileId === 'legacy_prof' ? null : prof.profileId,
+            studentName: prof.studentName || 'Rohit',
+            program: prof.program || calc.program || 'mtech',
+            department: prof.department || calc.department || 'cse'
+        };
+
+        state.currentCalculation = {
+            calculationId: calc.calculationId,
+            resultNickname: calc.resultNickname || 'Main Result',
+            isDirty: false,
+            mode: calc.mode || 'normal'
+        };
+
+        state.semesters = JSON.parse(JSON.stringify(calc.semesters || { sem1: [], sem2: [], sem3: [], sem4: [] }));
+        state.selectedSemesters = calc.selectedSemesters || { sem1: false, sem2: false, sem3: false, sem4: false };
+
+        if (dom.calcStudentName) dom.calcStudentName.value = state.currentProfile.studentName;
+        if (dom.calcResultNickname) dom.calcResultNickname.value = state.currentCalculation.resultNickname;
+        if (dom.calcProgramSelect) dom.calcProgramSelect.value = state.currentProfile.program;
+        if (dom.calcDepartmentSelect) dom.calcDepartmentSelect.value = state.currentProfile.department;
+        if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = state.currentProfile.studentName;
+        if (dom.calcLockStructure) dom.calcLockStructure.checked = state.currentCalculation.mode === 'normal';
+
+        calculateAndRefresh();
+        render();
+
+        const calcTab = document.getElementById('nav-calc-btn');
+        if (calcTab) calcTab.click();
+
+        showToast(`Loaded calculation "${calc.resultNickname}" under "${prof.studentName}" into calculator.`, 'info');
+    };
+
+    const hasDirty = Object.values(state.semesters).some(arr => arr.some(c => c.grade !== '')) && state.currentCalculation.isDirty;
+    if (hasDirty) {
+        showConfirmModal(
+            `Load "${calc.resultNickname}" into calculator? Unsaved changes in active calculation will be discarded.`,
+            doLoad
+        );
+    } else {
+        doLoad();
+    }
+}
+
 
 function loadHistoryIntoCalculator(record) {
     const doLoad = () => {

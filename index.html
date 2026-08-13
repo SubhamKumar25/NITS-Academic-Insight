@@ -299,19 +299,25 @@
                     <div class="student-info-section" style="background:var(--surface); border: 1px solid var(--border); padding: 16px; border-radius: var(--r-md); margin-bottom: 20px; box-shadow: var(--shadow-sm);">
                         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
                             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                                <span style="font-size: 0.88rem; font-weight: 700; color: var(--text);">Current Result</span>
-                                <button type="button" class="btn btn-secondary btn-sm" id="btn-new-result" style="min-height: 34px;">+ New Result</button>
+                                <span style="font-size: 0.88rem; font-weight: 700; color: var(--text);">Student Profile:</span>
+                                <span id="current-profile-display-badge" style="font-weight: 800; color: var(--primary); font-size: 0.92rem; background: var(--primary-light, #eef2ff); padding: 3px 10px; border-radius: var(--r-sm);">Rohit</span>
+                                <button type="button" class="btn btn-primary btn-sm" id="btn-new-calculation" title="Create another calculation inside this student profile" style="min-height: 34px; font-weight: 700;">+ New Calculation</button>
+                                <button type="button" class="btn btn-secondary btn-sm" id="btn-new-result" title="Create a brand new student profile" style="min-height: 34px;">+ New Result (New Profile)</button>
                             </div>
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <label class="checkbox-label" style="font-size: 0.82rem; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;">
-                                    <input type="checkbox" id="calc-lock-structure" checked style="width:16px; height:16px;"> Lock Predefined Courses
+                                    <input type="checkbox" id="calc-lock-structure" checked style="width:16px; height:16px;"> Lock Predefined Courses (Normal Mode)
                                 </label>
                             </div>
                         </div>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
                             <div class="form-group" style="margin-bottom:0;">
-                                <label for="calc-result-nickname" style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Result Name / Label *</label>
-                                <input type="text" id="calc-result-nickname" class="dash-search-input" placeholder="e.g. My M.Tech Result" value="My M.Tech Result" style="min-height: 36px;">
+                                <label for="calc-student-name" style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Student / Profile Name *</label>
+                                <input type="text" id="calc-student-name" class="dash-search-input" placeholder="e.g. Rohit" value="Rohit" style="min-height: 36px;">
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label for="calc-result-nickname" style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Result Nickname *</label>
+                                <input type="text" id="calc-result-nickname" class="dash-search-input" placeholder="e.g. Main Result" value="Main Result" style="min-height: 36px;">
                             </div>
                             <div class="form-group" style="margin-bottom:0;">
                                 <label for="calc-program-select" style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Program</label>
@@ -328,6 +334,7 @@
                             </div>
                         </div>
                     </div>
+
 
                     <div class="semester-tabs" id="semester-tabs-container">
                         <button class="sem-tab active" data-sem="sem1" id="tab-sem1">Semester 1</button>
