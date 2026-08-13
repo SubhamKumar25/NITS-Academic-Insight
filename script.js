@@ -3753,7 +3753,10 @@ function handleAuthState(user) {
 
         // Update Desktop Header Profile Display
         const profileWrapper = document.getElementById('profile-wrapper');
-        if (profileWrapper) {        const avatarEl = document.getElementById('profile-avatar');
+        if (profileWrapper) {
+            profileWrapper.style.display = 'block';
+        }
+        const avatarEl = document.getElementById('profile-avatar');
         const dropdownAvatarEl = document.getElementById('profile-dropdown-avatar');
         const nameEl = document.getElementById('profile-name');
         const dropdownNameEl = document.getElementById('profile-dropdown-name');
