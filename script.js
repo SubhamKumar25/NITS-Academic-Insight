@@ -111,11 +111,11 @@ const GRADE_POINT_MAPPING = {
     'I': 0
 };
 
-// Predefined departments & programs course configuration
-const DEPARTMENTS = {
-    "cse": {
-        name: "Computer Science and Engineering",
-        specializations: {
+// Predefined Academic Programs & Departments course configuration
+const ACADEMIC_PROGRAMS = {
+    "mtech": {
+        name: "M.Tech",
+        departments: {
             "cse": {
                 name: "Computer Science and Engineering",
                 courses: {
@@ -133,20 +133,23 @@ const DEPARTMENTS = {
                         { code: "CS5108", subject: "Internet Protocol", credits: 4, courseType: "Theory" },
                         { code: "CS5109", subject: "Artificial Intelligence", credits: 3, courseType: "Theory" },
                         { code: "CS5141", subject: "Complex Networks", credits: 3, courseType: "Theory" },
-                        { code: "CS5110", subject: "Computer Systems Lab-II", credits: 2, courseType: "Other" },
-                        { code: "CS5111", subject: "Extra Academic Activity - YOGA", credits: 0, courseType: "Other" }
+                        { code: "CS5110", subject: "Computer Systems Lab-II", credits: 2, courseType: "Other" }
                     ],
                     sem3: [
-                        { code: "CS5198", subject: "Project Phase-I", credits: 12, courseType: "Other" }
+                        { code: "CS6098", subject: "PROJECT 1", credits: 6, courseType: "Other" },
+                        { code: "CS6101", subject: "SEMINAR", credits: 2, courseType: "Other" }
                     ],
                     sem4: [
-                        { code: "CS5199", subject: "Project Phase-II", credits: 18, courseType: "Other" }
+                        { code: "CS6099", subject: "PROJECT 2", credits: 8, courseType: "Other" }
                     ]
                 }
             }
         }
     }
 };
+
+// Backward-compatible alias
+const DEPARTMENTS = ACADEMIC_PROGRAMS.mtech.departments;
 
 // DOM Cache
 const dom = {
@@ -318,11 +321,11 @@ const dom = {
     btnCancelEditHistory: document.getElementById('btn-cancel-edit-history'),
     btnSaveAsNewHistory: document.getElementById('btn-save-as-new-history'),
     btnSaveChangesHistory: document.getElementById('btn-save-changes-history'),
+    calcProfileSelect: document.getElementById('calc-profile-select'),
+    btnCalcNewProfile: document.getElementById('btn-calc-new-profile'),
     calcResultNickname: document.getElementById('calc-result-nickname'),
-    calcStudentName: document.getElementById('calc-student-name'),
-    calcStudentRoll: document.getElementById('calc-student-roll'),
+    calcProgramSelect: document.getElementById('calc-program-select'),
     calcDepartmentSelect: document.getElementById('calc-department-select'),
-    calcSpecializationSelect: document.getElementById('calc-specialization-select'),
     calcLockStructure: document.getElementById('calc-lock-structure'),
     autoSaveStatus: document.getElementById('auto-save-status')
 };
@@ -332,6 +335,9 @@ document.addEventListener('DOMContentLoaded', () => {
     initEventListeners();
     initAnalyzerEvents();
     initAttemptEvents();
+    if (!state.semesters.sem1 || state.semesters.sem1.length === 0) {
+        applyPredefinedCourses();
+    }
     render();
     initAuth();
     initHistorySystem();
@@ -408,24 +414,42 @@ function initEventListeners() {
         window.print();
     });
 
-    // Student Information & Program Details event listeners
+    // Result Profile & Program Details event listeners
+    if (dom.calcProfileSelect) {
+        dom.calcProfileSelect.addEventListener('change', (e) => {
+            state.activeProfileId = e.target.value;
+            const uid = state.auth.user ? state.auth.user.uid : 'default';
+            loadUserDataFromStorage(uid);
+            populateAllProfileSelects();
+            showToast("Switched to result profile.", "info");
+        });
+    }
+
+    if (dom.btnCalcNewProfile) {
+        dom.btnCalcNewProfile.addEventListener('click', () => {
+            const modal = document.getElementById('create-profile-modal');
+            if (modal) modal.style.display = 'flex';
+        });
+    }
+
+    if (dom.calcProgramSelect) {
+        dom.calcProgramSelect.addEventListener('change', () => {
+            applyPredefinedCourses();
+            calculateAndRefresh();
+            render();
+            triggerAutoSave();
+        });
+    }
+
     if (dom.calcDepartmentSelect) {
         dom.calcDepartmentSelect.addEventListener('change', () => {
-            populateSpecializations();
             applyPredefinedCourses();
             calculateAndRefresh();
             render();
             triggerAutoSave();
         });
     }
-    if (dom.calcSpecializationSelect) {
-        dom.calcSpecializationSelect.addEventListener('change', () => {
-            applyPredefinedCourses();
-            calculateAndRefresh();
-            render();
-            triggerAutoSave();
-        });
-    }
+
     if (dom.calcLockStructure) {
         dom.calcLockStructure.addEventListener('change', () => {
             renderSubjectRows();
@@ -433,13 +457,16 @@ function initEventListeners() {
         });
     }
     
-    [dom.calcResultNickname, dom.calcStudentName, dom.calcStudentRoll].forEach(input => {
-        if (input) {
-            input.addEventListener('input', () => {
-                triggerAutoSave();
-            });
-        }
-    });
+    if (dom.calcResultNickname) {
+        dom.calcResultNickname.addEventListener('input', () => {
+            const activeProfile = state.profiles.find(p => p.id === state.activeProfileId);
+            if (activeProfile) {
+                activeProfile.nickname = dom.calcResultNickname.value;
+            }
+            populateAllProfileSelects();
+            triggerAutoSave();
+        });
+    }
 }
 
 // -------------------------------------------------------------
@@ -3945,55 +3972,26 @@ function handleAuthState(user) {
     }
 }
 
-function populateSpecializations() {
-    const deptSelect = document.getElementById('calc-department-select');
-    const specSelect = document.getElementById('calc-specialization-select');
-    if (!deptSelect || !specSelect) return;
-
-    const deptVal = deptSelect.value;
-    specSelect.innerHTML = '<option value="">Select Specialization</option>';
-
-    if (deptVal && DEPARTMENTS[deptVal]) {
-        const specs = DEPARTMENTS[deptVal].specializations;
-        Object.keys(specs).forEach(key => {
-            const opt = document.createElement('option');
-            opt.value = key;
-            opt.textContent = specs[key].name;
-            specSelect.appendChild(opt);
-        });
-    }
-}
-
 function getPredefinedCoursesForActiveSemester() {
-    const deptSelect = document.getElementById('calc-department-select');
-    const specSelect = document.getElementById('calc-specialization-select');
-    if (!deptSelect || !specSelect) return [];
+    const progVal = document.getElementById('calc-program-select')?.value || 'mtech';
+    const deptVal = document.getElementById('calc-department-select')?.value || 'cse';
+    
+    const prog = ACADEMIC_PROGRAMS[progVal];
+    const dept = prog?.departments[deptVal];
+    if (!dept) return [];
 
-    const deptVal = deptSelect.value;
-    const specVal = specSelect.value;
-    if (!deptVal || !specVal) return [];
-
-    const dept = DEPARTMENTS[deptVal];
-    const spec = dept?.specializations[specVal];
-    if (!spec) return [];
-
-    return spec.courses[state.activeSemester] || [];
+    return dept.courses[state.activeSemester] || [];
 }
 
 function applyPredefinedCourses() {
-    const deptSelect = document.getElementById('calc-department-select');
-    const specSelect = document.getElementById('calc-specialization-select');
-    if (!deptSelect || !specSelect) return;
+    const progVal = document.getElementById('calc-program-select')?.value || 'mtech';
+    const deptVal = document.getElementById('calc-department-select')?.value || 'cse';
 
-    const deptVal = deptSelect.value;
-    const specVal = specSelect.value;
-    if (!deptVal || !specVal) return;
+    const prog = ACADEMIC_PROGRAMS[progVal];
+    const dept = prog?.departments[deptVal];
+    if (!dept) return;
 
-    const dept = DEPARTMENTS[deptVal];
-    const spec = dept?.specializations[specVal];
-    if (!spec) return;
-
-    const structure = spec.courses;
+    const structure = dept.courses;
     
     ['sem1', 'sem2', 'sem3', 'sem4'].forEach(semKey => {
         const predefinedList = structure[semKey] || [];
@@ -4028,6 +4026,23 @@ function applyPredefinedCourses() {
     });
 }
 
+function populateAllProfileSelects() {
+    const calcSelect = document.getElementById('calc-profile-select');
+    const analyzerSelect = document.getElementById('analyzer-profile-select');
+
+    [calcSelect, analyzerSelect].forEach(select => {
+        if (!select) return;
+        select.innerHTML = '';
+        state.profiles.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.nickname || 'Unnamed Result';
+            if (p.id === state.activeProfileId) opt.selected = true;
+            select.appendChild(opt);
+        });
+    });
+}
+
 let autoSaveTimeout = null;
 
 function triggerAutoSave() {
@@ -4046,18 +4061,18 @@ function triggerAutoSave() {
         }
 
         const profileId = state.activeProfileId || 'prof_default';
+        const nickname = document.getElementById('calc-result-nickname')?.value || 'My M.Tech Result';
+        const program = document.getElementById('calc-program-select')?.value || 'mtech';
+        const department = document.getElementById('calc-department-select')?.value || 'cse';
+
         const payload = {
-            resultId: profileId,
-            resultNickname: document.getElementById('calc-result-nickname')?.value || 'My M.Tech Result',
-            studentName: document.getElementById('calc-student-name')?.value || '',
-            rollNumber: document.getElementById('calc-student-roll')?.value || '',
-            department: document.getElementById('calc-department-select')?.value || '',
-            specialization: document.getElementById('calc-specialization-select')?.value || '',
-            semesters: state.semesters,
+            id: profileId,
+            ownerUid: uid,
+            nickname: nickname.trim(),
+            program,
+            department,
+            semesters: JSON.parse(JSON.stringify(state.semesters)),
             selectedSemesters: state.selectedSemesters,
-            isNonStandardPath: state.isNonStandardPath,
-            periods: state.periods,
-            projectTimeline: state.projectTimeline,
             updatedAt: new Date().toISOString()
         };
 
@@ -4065,13 +4080,13 @@ function triggerAutoSave() {
 
         const activeProfile = state.profiles.find(p => p.id === profileId);
         if (activeProfile) {
-            activeProfile.nickname = payload.resultNickname;
-            activeProfile.studentName = payload.studentName;
-            activeProfile.rollNumber = payload.rollNumber;
+            activeProfile.nickname = payload.nickname;
+            activeProfile.program = payload.program;
             activeProfile.department = payload.department;
-            activeProfile.specialization = payload.specialization;
-            saveProfileToStorage();
-            populateProfileSelect();
+            activeProfile.semesters = JSON.parse(JSON.stringify(state.semesters));
+            activeProfile.updatedAt = payload.updatedAt;
+            saveProfilesToStorage();
+            populateAllProfileSelects();
         }
 
         if (state.auth.mode === 'firebase') {
@@ -4083,17 +4098,15 @@ function triggerAutoSave() {
                 Promise.all([
                     setDoc(profileDocRef, {
                         id: profileId,
-                        nickname: payload.resultNickname,
-                        studentName: payload.studentName,
-                        rollNumber: payload.rollNumber,
+                        nickname: payload.nickname,
+                        program: payload.program,
                         department: payload.department,
-                        specialization: payload.specialization,
                         updatedAt: serverTimestamp()
-                    }),
+                    }, { merge: true }),
                     setDoc(calcStateDocRef, {
                         ...payload,
                         updatedAt: serverTimestamp()
-                    })
+                    }, { merge: true })
                 ])
                 .then(() => {
                     if (statusEl) {
@@ -4131,38 +4144,23 @@ function loadUserDataFromStorage(uid) {
     const activeProf = state.profiles.find(p => p.id === profileId);
     if (activeProf) {
         if (dom.calcResultNickname) dom.calcResultNickname.value = activeProf.nickname || 'My M.Tech Result';
-        if (dom.calcStudentName) dom.calcStudentName.value = activeProf.studentName || '';
-        if (dom.calcStudentRoll) dom.calcStudentRoll.value = activeProf.rollNumber || '';
-        if (dom.calcDepartmentSelect) {
-            dom.calcDepartmentSelect.value = activeProf.department || '';
-            populateSpecializations();
-        }
-        if (dom.calcSpecializationSelect) dom.calcSpecializationSelect.value = activeProf.specialization || '';
+        if (dom.calcProgramSelect) dom.calcProgramSelect.value = activeProf.program || 'mtech';
+        if (dom.calcDepartmentSelect) dom.calcDepartmentSelect.value = activeProf.department || 'cse';
     }
 
     if (savedData) {
         try {
             const parsed = JSON.parse(savedData);
-            state.semesters = parsed.semesters || state.semesters;
+            state.semesters = parsed.semesters ? JSON.parse(JSON.stringify(parsed.semesters)) : state.semesters;
             state.selectedSemesters = parsed.selectedSemesters || state.selectedSemesters;
-            state.isNonStandardPath = parsed.isNonStandardPath || false;
-            state.periods = parsed.periods || state.periods;
-            state.projectTimeline = parsed.projectTimeline || [];
         } catch (e) {
             console.error("Failed to load user academic data from browser storage:", e);
         }
+    } else if (activeProf && activeProf.semesters) {
+        state.semesters = JSON.parse(JSON.stringify(activeProf.semesters));
     } else {
-        // Fallback: Reset to standard empty calculator state if brand new user
-        state.semesters = { sem1: [], sem2: [], sem3: [], sem4: [] };
-        state.selectedSemesters = { sem1: false, sem2: false, sem3: false, sem4: false };
-        state.isNonStandardPath = false;
-        state.periods = [
-            { id: 'sem1', name: 'Semester 1', type: 'Semester', session: '', status: 'Completed', notes: '', isStandard: true },
-            { id: 'sem2', name: 'Semester 2', type: 'Semester', session: '', status: 'Completed', notes: '', isStandard: true },
-            { id: 'sem3', name: 'Semester 3', type: 'Semester', session: '', status: 'Completed', notes: '', isStandard: true },
-            { id: 'sem4', name: 'Semester 4', type: 'Semester', session: '', status: 'Completed', notes: '', isStandard: true }
-        ];
-        state.projectTimeline = [];
+        // Fallback: Apply predefined courses
+        applyPredefinedCourses();
     }
 
     if (state.auth.mode === 'firebase') {
@@ -4172,37 +4170,33 @@ function loadUserDataFromStorage(uid) {
                 .then(docSnap => {
                     if (docSnap.exists()) {
                         const parsed = docSnap.data();
-                        state.semesters = parsed.semesters || state.semesters;
+                        state.semesters = parsed.semesters ? JSON.parse(JSON.stringify(parsed.semesters)) : state.semesters;
                         state.selectedSemesters = parsed.selectedSemesters || state.selectedSemesters;
-                        state.isNonStandardPath = parsed.isNonStandardPath || false;
-                        state.periods = parsed.periods || state.periods;
-                        state.projectTimeline = parsed.projectTimeline || [];
                         localStorage.setItem(`nits_semesters_${uid}_${profileId}`, JSON.stringify(parsed));
                         
-                        // Re-sync UI inputs if they changed on cloud
-                        if (dom.calcResultNickname) dom.calcResultNickname.value = parsed.resultNickname || 'My M.Tech Result';
-                        if (dom.calcStudentName) dom.calcStudentName.value = parsed.studentName || '';
-                        if (dom.calcStudentRoll) dom.calcStudentRoll.value = parsed.rollNumber || '';
-                        if (dom.calcDepartmentSelect) {
-                            dom.calcDepartmentSelect.value = parsed.department || '';
-                            populateSpecializations();
-                        }
-                        if (dom.calcSpecializationSelect) dom.calcSpecializationSelect.value = parsed.specialization || '';
+                        // Re-sync UI inputs if changed on cloud
+                        if (dom.calcResultNickname) dom.calcResultNickname.value = parsed.nickname || parsed.resultNickname || 'My M.Tech Result';
+                        if (dom.calcProgramSelect) dom.calcProgramSelect.value = parsed.program || 'mtech';
+                        if (dom.calcDepartmentSelect) dom.calcDepartmentSelect.value = parsed.department || 'cse';
                         
                         calculateAndRefresh();
                         render();
                     } else {
-                        // If no cloud data yet, apply predefined courses if department is selected
-                        applyPredefinedCourses();
+                        // If no academic data yet, apply predefined courses
+                        if (!state.semesters || Object.values(state.semesters).every(arr => arr.length === 0)) {
+                            applyPredefinedCourses();
+                        }
                         calculateAndRefresh();
                         render();
                     }
                 })
-                .catch(err => console.error("Firestore sync error loading data:", err));
+                .catch(err => {
+                    console.error("Firestore sync error loading data:", err);
+                    calculateAndRefresh();
+                    render();
+                });
         }
     } else {
-        // If not firebase mode, apply predefined courses if department is selected
-        applyPredefinedCourses();
         calculateAndRefresh();
         render();
     }
@@ -4650,50 +4644,38 @@ window.initHistorySystem = function() {
     });
     
     // Edit Modal
-    dom.closeHistoryEditBtn.addEventListener('click', () => {
-        dom.historyEditModal.style.display = 'none';
-    });
-    dom.btnCancelEditHistory.addEventListener('click', () => {
-        dom.historyEditModal.style.display = 'none';
-    });
+    if (dom.closeHistoryEditBtn) {
+        dom.closeHistoryEditBtn.addEventListener('click', () => {
+            dom.historyEditModal.style.display = 'none';
+        });
+    }
+    if (dom.btnCancelEditHistory) {
+        dom.btnCancelEditHistory.addEventListener('click', () => {
+            dom.historyEditModal.style.display = 'none';
+        });
+    }
     
-    dom.btnSaveChangesHistory.addEventListener('click', () => {
-        if (editingHistoryRecord) {
-            const nickname = dom.editHistNicknameInput.value;
-            const name = dom.editHistNameInput.value;
-            const roll = dom.editHistRollInput.value;
-            
-            if (!name.trim()) {
-                showToast("Please enter the student name.", "warning");
-                return;
+    if (dom.btnSaveChangesHistory) {
+        dom.btnSaveChangesHistory.addEventListener('click', () => {
+            if (editingHistoryRecord) {
+                const nickname = dom.editHistNicknameInput ? dom.editHistNicknameInput.value : '';
+                const name = dom.editHistNameInput ? dom.editHistNameInput.value : '';
+                const roll = dom.editHistRollInput ? dom.editHistRollInput.value : '';
+                updateHistoryRecord(editingHistoryRecord.id, nickname, name, roll, editingHistoryRecord.semesters, false);
             }
-            if (!roll.trim()) {
-                showToast("Please enter the Roll Number / Student ID.", "warning");
-                return;
-            }
-            
-            updateHistoryRecord(editingHistoryRecord.id, nickname, name, roll, editingHistoryRecord.semesters, false);
-        }
-    });
+        });
+    }
     
-    dom.btnSaveAsNewHistory.addEventListener('click', () => {
-        if (editingHistoryRecord) {
-            const nickname = dom.editHistNicknameInput.value;
-            const name = dom.editHistNameInput.value;
-            const roll = dom.editHistRollInput.value;
-            
-            if (!name.trim()) {
-                showToast("Please enter the student name.", "warning");
-                return;
+    if (dom.btnSaveAsNewHistory) {
+        dom.btnSaveAsNewHistory.addEventListener('click', () => {
+            if (editingHistoryRecord) {
+                const nickname = dom.editHistNicknameInput ? dom.editHistNicknameInput.value : '';
+                const name = dom.editHistNameInput ? dom.editHistNameInput.value : '';
+                const roll = dom.editHistRollInput ? dom.editHistRollInput.value : '';
+                updateHistoryRecord(editingHistoryRecord.id, nickname, name, roll, editingHistoryRecord.semesters, true);
             }
-            if (!roll.trim()) {
-                showToast("Please enter the Roll Number / Student ID.", "warning");
-                return;
-            }
-            
-            updateHistoryRecord(editingHistoryRecord.id, nickname, name, roll, editingHistoryRecord.semesters, true);
-        }
-    });
+        });
+    }
 };
 
 // Fetch user history documents from database
@@ -4752,14 +4734,10 @@ async function saveHistoryRecord(nickname, name, roll, sourceType, semestersOver
     
     const semestersSnapshot = semestersOverride || JSON.parse(JSON.stringify(state.semesters));
     
-    // Pull department/specialization from active profile
+    // Pull program and department from active profile
     const activeProf = state.profiles.find(p => p.id === state.activeProfileId);
-    const department = (sourceType === 'viewed' && pendingSavePublicRecord)
-        ? (pendingSavePublicRecord.department || '')
-        : (activeProf ? (activeProf.department || '') : '');
-    const specialization = (sourceType === 'viewed' && pendingSavePublicRecord)
-        ? (pendingSavePublicRecord.specialization || '')
-        : (activeProf ? (activeProf.specialization || '') : '');
+    const program = activeProf?.program || 'mtech';
+    const department = activeProf?.department || 'cse';
 
     // Temporarily replace semesters to calculate metrics
     const originalSemesters = state.semesters;
@@ -4774,12 +4752,10 @@ async function saveHistoryRecord(nickname, name, roll, sourceType, semestersOver
         nickname: nickname.trim(),
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        recordType: "snapshot",
+        recordType: sourceType, 
         sourceType: sourceType, 
-        studentId: roll.trim(),
-        studentName: name.trim(),
+        program,
         department,
-        specialization,
         semesters: semestersSnapshot,
         summary: {
             overallCGPA: overall.cgpa,
@@ -4791,77 +4767,25 @@ async function saveHistoryRecord(nickname, name, roll, sourceType, semestersOver
         version: 1
     };
 
-    if (sourceType === 'viewed') {
-        record.viewedStudentId = roll.trim();
-        record.viewedStudentName = name.trim();
-        record.viewerUid = uid;
-    }
-
     try {
         if (state.auth.mode === 'firebase') {
             const db = getFirebaseDb();
             if (db) {
-                // 1. Save Nickname (only when roll is known)
-                if (nickname.trim() && roll.trim()) {
-                    await setDoc(doc(db, "users", uid, "nicknames", roll.trim()), {
-                        nickname: nickname.trim(),
-                        updatedAt: serverTimestamp()
-                    }, { merge: true });
-                }
-                
-                // 2. Save Snapshot History — always addDoc (immutable snapshot)
-                await addDoc(collection(db, "users", uid, "history"), {
+                // Save Snapshot History — always addDoc (immutable snapshot)
+                const docRef = await addDoc(collection(db, "users", uid, "history"), {
                     ...record,
                     createdAt: serverTimestamp(),
                     updatedAt: serverTimestamp()
                 });
-                
-                // 3. Update public profile if this is the user's own result and roll is known.
-                //    Use merge:true to preserve any existing fields already written.
-                if (sourceType === 'own' && roll.trim()) {
-                    await setDoc(doc(db, "publicProfiles", roll.trim()), {
-                        studentId: roll.trim(),
-                        studentName: name.trim(),
-                        department,
-                        specialization,
-                        semesters: semestersSnapshot,
-                        summary: record.summary,
-                        ownerUid: uid,
-                        updatedAt: serverTimestamp()
-                    }, { merge: true });
-                }
+                record.id = docRef.id;
                 showToast("Snapshot saved to history successfully.", "success");
             }
         } else {
             // Mock Mode
-            if (nickname.trim() && roll.trim()) {
-                const mockNicks = JSON.parse(localStorage.getItem(`nits_mock_nicknames_${uid}`) || '{}');
-                mockNicks[roll.trim()] = nickname.trim();
-                localStorage.setItem(`nits_mock_nicknames_${uid}`, JSON.stringify(mockNicks));
-            }
-            
             const mockHist = JSON.parse(localStorage.getItem(`nits_mock_history_${uid}`) || '[]');
             record.id = 'hist_' + Date.now();
             mockHist.unshift(record);
             localStorage.setItem(`nits_mock_history_${uid}`, JSON.stringify(mockHist));
-            
-            if (sourceType === 'own' && roll.trim()) {
-                const publicProfiles = JSON.parse(localStorage.getItem('nits_mock_public_profiles') || '{}');
-                // Merge with existing data rather than replacing
-                publicProfiles[roll.trim()] = Object.assign(
-                    publicProfiles[roll.trim()] || {},
-                    {
-                        studentId: roll.trim(),
-                        studentName: name.trim(),
-                        department,
-                        specialization,
-                        semesters: semestersSnapshot,
-                        summary: record.summary,
-                        ownerUid: uid
-                    }
-                );
-                localStorage.setItem('nits_mock_public_profiles', JSON.stringify(publicProfiles));
-            }
             showToast("Snapshot saved to mock history successfully.", "success");
         }
         
@@ -5041,7 +4965,26 @@ async function deleteHistoryRecord(recordId) {
     });
 }
 
-// Render list of cards on the history tab panel
+function formatAcademicDate(timestamp) {
+    if (!timestamp) return new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    let d;
+    if (typeof timestamp === 'object' && timestamp.seconds) {
+        d = new Date(timestamp.seconds * 1000);
+    } else if (typeof timestamp === 'object' && typeof timestamp.toDate === 'function') {
+        d = timestamp.toDate();
+    } else {
+        d = new Date(timestamp);
+    }
+    if (isNaN(d.getTime())) {
+        d = new Date();
+    }
+    return d.toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+    });
+}
+
 function renderHistoryList() {
     const container = dom.historyItemsContainer;
     container.innerHTML = '';
@@ -5055,9 +4998,9 @@ function renderHistoryList() {
     // 1. Search Query filter matching
     if (searchQuery) {
         filtered = filtered.filter(item => {
-            const matchesName = (item.studentName || '').toLowerCase().includes(searchQuery);
             const matchesNick = (item.nickname || '').toLowerCase().includes(searchQuery);
-            const matchesId = (item.studentId || '').toLowerCase().includes(searchQuery);
+            const matchesProg = (item.program || '').toLowerCase().includes(searchQuery);
+            const matchesDept = (item.department || '').toLowerCase().includes(searchQuery);
             
             let matchesCourses = false;
             if (item.semesters) {
@@ -5071,29 +5014,24 @@ function renderHistoryList() {
                 });
             }
             
-            return matchesName || matchesNick || matchesId || matchesCourses;
+            return matchesNick || matchesProg || matchesDept || matchesCourses;
         });
     }
     
     // 2. Filter Types
     if (filterType === 'own') {
-        filtered = filtered.filter(item => item.sourceType === 'own');
-    } else if (filterType === 'viewed') {
-        filtered = filtered.filter(item => item.sourceType === 'viewed');
-    } else if (filterType === 'recent') {
-        const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-        filtered = filtered.filter(item => (item.updatedAt || item.createdAt) > oneDayAgo);
+        filtered = filtered.filter(item => item.recordType === 'own' || item.sourceType === 'own');
+    } else if (filterType === 'other' || filterType === 'viewed') {
+        filtered = filtered.filter(item => item.recordType === 'other' || item.sourceType === 'viewed');
     }
     
     // 3. Sorting options
     if (sortVal === 'newest') {
-        filtered.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        filtered.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
     } else if (sortVal === 'oldest') {
-        filtered.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-    } else if (sortVal === 'updated') {
-        filtered.sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+        filtered.sort((a, b) => new Date(a.createdAt || a.updatedAt || 0) - new Date(b.createdAt || b.updatedAt || 0));
     } else if (sortVal === 'name') {
-        filtered.sort((a, b) => (a.studentName || '').localeCompare(b.studentName || ''));
+        filtered.sort((a, b) => (a.nickname || '').localeCompare(b.nickname || ''));
     }
     
     if (filtered.length === 0) {
@@ -5109,33 +5047,27 @@ function renderHistoryList() {
         const div = document.createElement('div');
         div.className = 'history-card';
         
-        const isOwn = record.sourceType === 'own';
+        const isOwn = record.recordType === 'own' || record.sourceType === 'own';
         const badgeClass = isOwn ? 'badge-own' : 'badge-viewed';
-        const badgeLabel = isOwn ? 'My Data' : 'Viewed';
+        const badgeLabel = isOwn ? 'MY RESULT' : 'OTHER RESULT';
         
-        const displayLabel = record.nickname ? record.nickname : (isOwn ? 'My Academic Record' : 'Viewed Student');
-        const recordTypeLabel = isOwn ? 'My academic record' : "Someone else's academic record";
-        
-        // Build department line — prefer record.department; fall back gracefully
-        const deptName = record.department ? (DEPARTMENTS[record.department]?.name || record.department) : '';
-        const deptLine = deptName ? `Dept: ${deptName}` : '';
+        const displayLabel = record.nickname || (isOwn ? 'My M.Tech Result' : 'Academic Result');
+        const progName = record.program ? (ACADEMIC_PROGRAMS[record.program]?.name || record.program) : 'M.Tech';
+        const deptName = record.department ? (ACADEMIC_PROGRAMS.mtech?.departments[record.department]?.name || record.department) : 'Computer Science and Engineering';
+        const subtitleText = `${progName} • ${deptName}`;
 
         const sum = record.summary || {};
         const cgpaStr = sum.overallCGPA !== undefined && sum.overallCGPA !== null ? sum.overallCGPA.toFixed(2) : '—';
         const creditsStr = sum.totalCredits !== undefined && sum.totalCredits !== null ? String(sum.totalCredits) : '—';
         const backlogsStr = sum.activeBacklogs !== undefined && sum.activeBacklogs !== null ? String(sum.activeBacklogs) : '—';
         
-        const updatedDate = new Date(record.updatedAt || record.createdAt || Date.now()).toLocaleDateString('en-GB', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric'
-        });
+        const updatedDate = formatAcademicDate(record.updatedAt || record.createdAt);
         
         div.innerHTML = `
             <div class="history-card-header">
                 <div>
                     <h4 class="history-card-title">${displayLabel}</h4>
-                    <p class="history-card-subtitle">${recordTypeLabel}${deptLine ? ' · ' + deptLine : ''}</p>
+                    <p class="history-card-subtitle">${subtitleText}</p>
                 </div>
                 <span class="history-card-badge ${badgeClass}">${badgeLabel}</span>
             </div>
@@ -5149,7 +5081,6 @@ function renderHistoryList() {
                 <div class="history-card-actions">
                     <button type="button" class="history-action-btn load-hist-btn" data-id="${record.id}" style="background-color: var(--primary); color: white;">Load</button>
                     <button type="button" class="history-action-btn view-hist-btn" data-id="${record.id}">View</button>
-                    <button type="button" class="history-action-btn edit-hist-btn" data-id="${record.id}">Edit</button>
                     <button type="button" class="history-action-btn report-hist-btn" data-id="${record.id}">Report</button>
                     <button type="button" class="history-action-btn history-action-btn-danger delete-hist-btn" data-id="${record.id}">Delete</button>
                 </div>
@@ -5158,7 +5089,6 @@ function renderHistoryList() {
         
         div.querySelector('.load-hist-btn').addEventListener('click', () => loadHistoryIntoCalculator(record));
         div.querySelector('.view-hist-btn').addEventListener('click', () => openHistoryDetail(record));
-        div.querySelector('.edit-hist-btn').addEventListener('click', () => openHistoryEdit(record));
         div.querySelector('.report-hist-btn').addEventListener('click', () => openHistoryReport(record));
         div.querySelector('.delete-hist-btn').addEventListener('click', () => deleteHistoryRecord(record.id));
         
@@ -5167,76 +5097,64 @@ function renderHistoryList() {
 }
 
 function loadHistoryIntoCalculator(record) {
-    showConfirmModal(`Do you want to load "${record.nickname || 'this snapshot'}" into the calculator? This will replace your current active calculator results.`, () => {
+    showConfirmModal(`Do you want to load "${record.nickname || 'this snapshot'}" into the calculator? This will load these results into your active workspace.`, () => {
         const uid = state.auth.user ? state.auth.user.uid : 'default';
         
         // 1. Create or set active profile ID
-        const existingProf = state.profiles.find(p => p.nickname === record.nickname && p.studentName === record.studentName && p.rollNumber === record.studentId);
+        let existingProf = state.profiles.find(p => p.id === record.profileId || p.nickname === record.nickname);
         
         if (existingProf) {
             state.activeProfileId = existingProf.id;
+            existingProf.semesters = JSON.parse(JSON.stringify(record.semesters || { sem1: [], sem2: [], sem3: [], sem4: [] }));
         } else {
             const newProf = {
-                id: 'prof_' + Date.now(),
+                id: record.profileId || ('prof_' + Date.now()),
                 nickname: record.nickname || 'Loaded Result',
-                studentName: record.studentName || '',
-                rollNumber: record.studentId || '',
-                department: record.department || '',
-                specialization: record.specialization || '',
-                createdAt: new Date().toISOString()
+                recordType: record.recordType || 'own',
+                program: record.program || 'mtech',
+                department: record.department || 'cse',
+                isCustomStructure: false,
+                semesters: JSON.parse(JSON.stringify(record.semesters || { sem1: [], sem2: [], sem3: [], sem4: [] })),
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
             };
             state.profiles.push(newProf);
             state.activeProfileId = newProf.id;
-            saveProfileToStorage();
-            populateProfileSelect();
+            saveProfilesToStorage();
+            populateAllProfileSelects();
         }
 
         // 2. Load semesters dataset
-        state.semesters = JSON.parse(JSON.stringify(record.semesters));
+        state.semesters = JSON.parse(JSON.stringify(record.semesters || { sem1: [], sem2: [], sem3: [], sem4: [] }));
         state.selectedSemesters = record.selectedSemesters || { sem1: false, sem2: false, sem3: false, sem4: false };
-        state.isNonStandardPath = record.isNonStandardPath || false;
-        state.periods = record.periods || state.periods;
-        state.projectTimeline = record.projectTimeline || [];
 
         // 3. Update Inputs
         if (dom.calcResultNickname) dom.calcResultNickname.value = record.nickname || 'Loaded Result';
-        if (dom.calcStudentName) dom.calcStudentName.value = record.studentName || '';
-        if (dom.calcStudentRoll) dom.calcStudentRoll.value = record.studentId || '';
-        if (dom.calcDepartmentSelect) {
-            dom.calcDepartmentSelect.value = record.department || '';
-            populateSpecializations();
-        }
-        if (dom.calcSpecializationSelect) dom.calcSpecializationSelect.value = record.specialization || '';
+        if (dom.calcProgramSelect) dom.calcProgramSelect.value = record.program || 'mtech';
+        if (dom.calcDepartmentSelect) dom.calcDepartmentSelect.value = record.department || 'cse';
 
         calculateAndRefresh();
         render();
         triggerAutoSave();
 
         // 4. Navigate back to calculator tab
-        const calcTab = document.querySelector('a[href="#calculator"]') || document.querySelector('.site-nav a') || document.querySelector('a[data-tab="calculator"]');
+        const calcTab = document.querySelector('a[href="#calculator"]') || document.querySelector('.site-nav a');
         if (calcTab) {
             calcTab.click();
-        } else {
-            const calcSection = document.getElementById('calculator') || document.querySelector('.calculator-section');
-            if (calcSection) {
-                document.querySelectorAll('main section').forEach(sec => sec.style.display = 'none');
-                calcSection.style.display = 'block';
-            }
         }
         showToast(`Loaded result: ${record.nickname || 'Loaded Result'}`, "success");
     });
 }
 
-// Show detailed academic snapshot modal
 function openHistoryDetail(record) {
     viewingHistoryRecord = record;
     
-    dom.histDetailName.textContent = record.studentName || '—';
-    dom.histDetailRoll.textContent = record.studentId || '—';
-    dom.histDetailNickname.textContent = record.nickname || '—';
+    dom.histDetailName.textContent = record.nickname || '—';
+    dom.histDetailRoll.textContent = record.program ? (ACADEMIC_PROGRAMS[record.program]?.name || record.program) : 'M.Tech';
+    dom.histDetailNickname.textContent = record.department ? (ACADEMIC_PROGRAMS.mtech?.departments[record.department]?.name || record.department) : 'CSE';
     
-    const isOwn = record.sourceType === 'own';
-    dom.histDetailBadge.textContent = isOwn ? 'My Data' : 'Viewed';
+    const isOwn = record.recordType === 'own' || record.sourceType === 'own';
+    dom.histDetailBadge.textContent = isOwn ? 'MY RESULT' : 'OTHER RESULT';
     dom.histDetailBadge.className = 'history-card-badge ' + (isOwn ? 'badge-own' : 'badge-viewed');
     
     const sum = record.summary || {};
@@ -5285,7 +5203,7 @@ function openHistoryDetail(record) {
         wrapper.appendChild(semBlock);
     });
     
-    dom.histDetailVersionInfo.textContent = `Version ${record.version || 1} | Last Modified: ${new Date(record.updatedAt || record.createdAt || Date.now()).toLocaleDateString('en-GB')}`;
+    dom.histDetailVersionInfo.textContent = `Version ${record.version || 1} | Last Modified: ${formatAcademicDate(record.updatedAt || record.createdAt)}`;
     
     const savePublicBtn = document.getElementById('btn-hist-detail-save-public');
     if (savePublicBtn) savePublicBtn.remove();
@@ -5446,27 +5364,22 @@ function downloadReportPDF(record) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.text("Academic Performance Report", 14, 25);
-    doc.text(`Generated: ${new Date(record.updatedAt || record.createdAt || Date.now()).toLocaleString()}`, 14, 32);
+    doc.text(`Generated: ${formatAcademicDate(record.updatedAt || record.createdAt)}`, 14, 32);
     
-    // Student Info Card
+    // Result Details Card
     doc.setTextColor(...textColor);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    doc.text("STUDENT INFORMATION", 14, 52);
+    doc.text("ACADEMIC RECORD INFORMATION", 14, 52);
     doc.line(14, 54, 196, 54);
     
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.text(`Student Name: ${record.studentName || '—'}`, 14, 62);
-    doc.text(`Student ID / Roll No: ${record.studentId || '—'}`, 14, 68);
-    if (record.nickname) {
-        doc.text(`Result Name: ${record.nickname}`, 14, 74);
-    }
-
-    const deptName = record.department ? (DEPARTMENTS[record.department]?.name || record.department) : '—';
-    const specName = record.specialization ? (DEPARTMENTS[record.department]?.specializations[record.specialization]?.name || record.specialization) : '—';
+    doc.text(`Result Name: ${record.nickname || 'My M.Tech Result'}`, 14, 62);
+    const progName = record.program ? (ACADEMIC_PROGRAMS[record.program]?.name || record.program) : 'M.Tech';
+    const deptName = record.department ? (ACADEMIC_PROGRAMS.mtech?.departments[record.department]?.name || record.department) : 'Computer Science and Engineering';
+    doc.text(`Program: ${progName}`, 14, 68);
     doc.text(`Department: ${deptName}`, 110, 62);
-    doc.text(`Specialization: ${specName}`, 110, 68);
     
     // Determine active semesters with data to calculate cumulative CGPA
     const semesters = record.semesters || {};
@@ -5482,7 +5395,7 @@ function downloadReportPDF(record) {
         semsUpToMax.push('sem' + k);
     }
 
-    // Temporary context swap to use the same logic
+    // Temporary context swap to use the same calculation engine
     const originalSemesters = state.semesters;
     state.semesters = semesters;
     const cumulativeData = calculateCombined(semsUpToMax);
@@ -5497,32 +5410,32 @@ function downloadReportPDF(record) {
 
     // Summary Metrics Cards
     doc.setFillColor(248, 249, 250);
-    doc.rect(14, 82, 182, 26, "F");
+    doc.rect(14, 76, 182, 26, "F");
     doc.setDrawColor(222, 226, 230);
-    doc.rect(14, 82, 182, 26, "S");
+    doc.rect(14, 76, 182, 26, "S");
     
     doc.setFont("helvetica", "bold");
-    doc.text("CGPA (Cumulative)", 24, 90);
+    doc.text("CGPA (Cumulative)", 24, 84);
     doc.setFont("helvetica", "normal");
-    doc.text(cgpaText, 24, 98);
+    doc.text(cgpaText, 24, 92);
     
     doc.setFont("helvetica", "bold");
-    doc.text("Percentage", 74, 90);
+    doc.text("Percentage", 74, 84);
     doc.setFont("helvetica", "normal");
-    doc.text(pctText, 74, 98);
+    doc.text(pctText, 74, 92);
     
     doc.setFont("helvetica", "bold");
-    doc.text("Credits Earned", 124, 90);
+    doc.text("Credits Earned", 124, 84);
     doc.setFont("helvetica", "normal");
-    doc.text(cumulativeData.totalCredits !== undefined && cumulativeData.totalCredits !== null ? String(cumulativeData.totalCredits) : '—', 124, 98);
+    doc.text(cumulativeData.totalCredits !== undefined && cumulativeData.totalCredits !== null ? String(cumulativeData.totalCredits) : '—', 124, 92);
     
     doc.setFont("helvetica", "bold");
-    doc.text("Active Backlogs", 164, 90);
+    doc.text("Active Backlogs", 164, 84);
     doc.setFont("helvetica", "normal");
-    doc.text(cumulativeData.backlogs !== undefined && cumulativeData.backlogs !== null ? String(cumulativeData.backlogs) : '—', 164, 98);
+    doc.text(cumulativeData.backlogs !== undefined && cumulativeData.backlogs !== null ? String(cumulativeData.backlogs) : '—', 164, 92);
     
     // Semester breakdowns
-    let yPos = 122;
+    let yPos = 114;
     
     Object.keys(semesters).sort().forEach((semKey) => {
         const courses = semesters[semKey] || [];
@@ -5612,8 +5525,10 @@ function downloadReportPDF(record) {
     doc.line(14, yPos, 196, yPos);
     doc.text("Disclaimer: This report is generated by NITS Academic Insight and is intended for informational purposes only.", 14, yPos + 5);
     
-    // Save report file
-    const filename = `NITS-Academic-Report-${record.studentName || record.nickname || 'Student'}-${record.studentId || 'Report'}.pdf`;
+    // Save report file with sanitized name
+    const rawName = record.nickname || 'My-MTech-Result';
+    const safeName = rawName.trim().replace(/[^a-zA-Z0-9_-]/g, '-');
+    const filename = `${safeName}-Report.pdf`;
     doc.save(filename);
 }
 
@@ -5680,7 +5595,7 @@ function loadProfilesFromDb() {
                         if (!state.profiles.some(p => p.id === state.activeProfileId)) {
                             state.activeProfileId = state.profiles[0].id;
                         }
-                        populateProfileSelect();
+                        populateAllProfileSelects();
                     }
                     // Load academic data for the now-resolved active profile
                     loadUserDataFromStorage(user.uid);
@@ -5706,7 +5621,7 @@ function loadProfilesFromStorage() {
         if (!state.profiles.some(p => p.id === state.activeProfileId)) {
             state.activeProfileId = state.profiles[0].id;
         }
-        populateProfileSelect();
+        populateAllProfileSelects();
     }
     const uid = state.auth.user ? state.auth.user.uid : 'default';
     loadUserDataFromStorage(uid);
@@ -5716,36 +5631,26 @@ function createDefaultProfile() {
     const defaultProfile = {
         id: 'prof_default',
         nickname: 'My M.Tech Result',
-        studentName: state.auth.user ? (state.auth.user.displayName || '') : '',
-        rollNumber: '',
-        department: '',
-        specialization: '',
-        createdAt: new Date().toISOString()
+        recordType: 'own',
+        program: 'mtech',
+        department: 'cse',
+        isCustomStructure: false,
+        semesters: { sem1: [], sem2: [], sem3: [], sem4: [] },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
     };
     state.profiles = [defaultProfile];
     state.activeProfileId = 'prof_default';
-    saveProfileToStorage();
-    populateProfileSelect();
+    applyPredefinedCourses();
+    defaultProfile.semesters = JSON.parse(JSON.stringify(state.semesters));
+    saveProfilesToStorage();
+    populateAllProfileSelects();
     const uid = state.auth.user ? state.auth.user.uid : 'default';
     loadUserDataFromStorage(uid);
 }
 
-function saveProfileToStorage() {
+function saveProfilesToStorage() {
     localStorage.setItem('nits_profiles', JSON.stringify(state.profiles));
-}
-
-function populateProfileSelect() {
-    const select = document.getElementById('analyzer-profile-select');
-    if (!select) return;
-    select.innerHTML = '';
-    
-    state.profiles.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = p.nickname + (p.studentName ? ` (${p.studentName})` : '');
-        if (p.id === state.activeProfileId) opt.selected = true;
-        select.appendChild(opt);
-    });
 }
 
 function bindAnalyzerEvents() {
@@ -5763,74 +5668,69 @@ function bindAnalyzerEvents() {
     const hideProfileModal = () => { if (profileModal) profileModal.style.display = 'none'; };
     if (closeProfileBtn) closeProfileBtn.addEventListener('click', hideProfileModal);
     if (cancelProfileBtn) cancelProfileBtn.addEventListener('click', hideProfileModal);
-    
-    const newDeptSelect = document.getElementById('new-profile-dept');
-    const newSpecSelect = document.getElementById('new-profile-spec');
-    if (newDeptSelect && newSpecSelect) {
-        newDeptSelect.addEventListener('change', () => {
-            const deptVal = newDeptSelect.value;
-            newSpecSelect.innerHTML = '<option value="">Select Specialization</option>';
-            if (deptVal && DEPARTMENTS[deptVal]) {
-                const specs = DEPARTMENTS[deptVal].specializations;
-                Object.keys(specs).forEach(key => {
-                    const opt = document.createElement('option');
-                    opt.value = key;
-                    opt.textContent = specs[key].name;
-                    newSpecSelect.appendChild(opt);
-                });
-            }
-        });
-    }
 
     if (saveProfileBtn) {
         saveProfileBtn.addEventListener('click', () => {
             const nickInput = document.getElementById('new-profile-nickname');
-            const nameInput = document.getElementById('new-profile-name');
-            const rollInput = document.getElementById('new-profile-roll');
+            const typeInput = document.getElementById('new-profile-type');
+            const progInput = document.getElementById('new-profile-prog');
             const deptInput = document.getElementById('new-profile-dept');
-            const specInput = document.getElementById('new-profile-spec');
             
             const nickname = (nickInput ? nickInput.value : '').trim();
             if (!nickname) {
-                showToast("Please enter a profile nickname.", "error");
+                showToast("Please enter a result nickname.", "error");
                 return;
             }
             
+            const program = progInput?.value || 'mtech';
+            const department = deptInput?.value || 'cse';
+            const recordType = typeInput?.value || 'own';
+
             const newProf = {
-                id: 'prof_' + Date.now(),
+                id: 'prof_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
                 nickname,
-                studentName: (nameInput ? nameInput.value : '').trim(),
-                rollNumber: (rollInput ? rollInput.value : '').trim(),
-                department: (deptInput ? deptInput.value : '').trim(),
-                specialization: (specInput ? specInput.value : '').trim(),
-                createdAt: new Date().toISOString()
+                recordType,
+                program,
+                department,
+                isCustomStructure: false,
+                semesters: { sem1: [], sem2: [], sem3: [], sem4: [] },
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
             };
             
             state.profiles.push(newProf);
             state.activeProfileId = newProf.id;
-            saveProfileToStorage();
+            
+            // Apply predefined courses for this new profile
+            applyPredefinedCourses();
+            newProf.semesters = JSON.parse(JSON.stringify(state.semesters));
+            
+            saveProfilesToStorage();
             
             const user = state.auth.user;
             if (user && state.auth.mode === 'firebase' && window.db) {
                 const { doc, setDoc } = window.dbModules || {};
                 if (doc && setDoc) {
-                    setDoc(doc(window.db, 'users', user.uid, 'profiles', newProf.id), newProf)
-                        .catch(err => console.warn("Firestore profile save failed:", err));
+                    setDoc(doc(window.db, 'users', user.uid, 'profiles', newProf.id), {
+                        id: newProf.id,
+                        nickname: newProf.nickname,
+                        recordType: newProf.recordType,
+                        program: newProf.program,
+                        department: newProf.department,
+                        createdAt: serverTimestamp(),
+                        updatedAt: serverTimestamp()
+                    }).catch(err => console.warn("Firestore profile save failed:", err));
                 }
             }
             
-            populateProfileSelect();
+            populateAllProfileSelects();
             
             // Clear inputs
             if (nickInput) nickInput.value = '';
-            if (nameInput) nameInput.value = '';
-            if (rollInput) rollInput.value = '';
-            if (deptInput) deptInput.value = '';
-            if (specInput) specInput.innerHTML = '<option value="">Select Specialization</option>';
 
             loadUserDataFromStorage(user ? user.uid : 'default');
             hideProfileModal();
-            showToast(`Profile "${nickname}" created.`, "success");
+            showToast(`Result "${nickname}" created.`, "success");
         });
     }
 
@@ -5839,7 +5739,8 @@ function bindAnalyzerEvents() {
             state.activeProfileId = e.target.value;
             const uid = state.auth.user ? state.auth.user.uid : 'default';
             loadUserDataFromStorage(uid);
-            showToast("Active profile switched.", "info");
+            populateAllProfileSelects();
+            showToast("Active result switched.", "info");
         });
     }
 

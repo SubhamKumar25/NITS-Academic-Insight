@@ -295,112 +295,36 @@
                         <p id="marks-method-desc" style="display:none;">Enter marks only when you need the calculator to determine the grade. Marks are normalized to 100 according to the NIT Silchar M.Tech grading rules.</p>
                     </div>
 
-                    <!-- Student Information & Program Details -->
-                    <div class="student-info-section" style="background:var(--neutral-light); border: 1px solid var(--border); padding: 16px; border-radius: var(--r-md); margin-bottom: 20px;">
-                        <h3 style="margin: 0 0 12px 0; font-size: 0.9rem; font-weight: 700; color: var(--text-main);">Student &amp; Program Details</h3>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
-                            <div class="form-group" style="margin-bottom:0;">
-                                <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Result Nickname / Name *</label>
-                                <input type="text" id="calc-result-nickname" class="dash-search-input" placeholder="e.g. My M.Tech Result" value="My M.Tech Result" style="min-height: 34px;">
+                    <!-- Result Profile, Program & Department Details -->
+                    <div class="student-info-section" style="background:var(--surface); border: 1px solid var(--border); padding: 16px; border-radius: var(--r-md); margin-bottom: 20px; box-shadow: var(--shadow-sm);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
+                            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                <label for="calc-profile-select" style="font-size: 0.82rem; font-weight: 700; color: var(--text);">Active Result:</label>
+                                <select id="calc-profile-select" class="select-type" style="min-height: 36px; padding: 4px 12px; font-weight: 700; font-size: 0.85rem; max-width: 260px;"></select>
+                                <button type="button" class="btn btn-secondary btn-sm" id="btn-calc-new-profile" style="min-height: 36px;">+ New Result</button>
                             </div>
-                            <div class="form-group" style="margin-bottom:0;">
-                                <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Student Name</label>
-                                <input type="text" id="calc-student-name" class="dash-search-input" placeholder="e.g. Rahul Kumar" value="" style="min-height: 34px;">
-                            </div>
-                            <div class="form-group" style="margin-bottom:0;">
-                                <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Student ID / Roll Number</label>
-                                <input type="text" id="calc-student-roll" class="dash-search-input" placeholder="e.g. 2314056" value="" style="min-height: 34px;">
-                            </div>
-                            <div class="form-group" style="margin-bottom:0;">
-                                <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Department</label>
-                                <select id="calc-department-select" class="select-type" style="width:100%; min-height: 34px;">
-                                    <option value="">Select Department</option>
-                                    <option value="cse">Computer Science and Engineering</option>
-                                </select>
-                            </div>
-                            <div class="form-group" style="margin-bottom:0;">
-                                <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Specialization / Program</label>
-                                <select id="calc-specialization-select" class="select-type" style="width:100%; min-height: 34px;">
-                                    <option value="">Select Specialization</option>
-                                </select>
-                            </div>
-                            <div class="form-group" style="margin-bottom:0; display: flex; align-items: flex-end; padding-bottom: 6px;">
-                                <label class="checkbox-label" style="font-size: 0.8rem; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <label class="checkbox-label" style="font-size: 0.82rem; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;">
                                     <input type="checkbox" id="calc-lock-structure" checked style="width:16px; height:16px;"> Lock Predefined Courses
                                 </label>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="advanced-toggle-bar">
-                        <button type="button" class="advanced-toggle-btn" id="advanced-toggle-btn">
-                            Advanced options <span class="toggle-arrow">&#x25BE;</span>
-                        </button>
-                    </div>
-
-                    <div class="advanced-panel" id="advanced-panel" style="display: none;">
-                        <div class="advanced-option-row">
-                            <span class="advanced-label">Non-standard academic path?</span>
-                            <div class="toggle-buttons">
-                                <button type="button" class="toggle-btn active" id="non-standard-no-btn">No</button>
-                                <button type="button" class="toggle-btn" id="non-standard-yes-btn">Yes</button>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label for="calc-result-nickname" style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Result Name / Nickname *</label>
+                                <input type="text" id="calc-result-nickname" class="dash-search-input" placeholder="e.g. My M.Tech Result" value="My M.Tech Result" style="min-height: 36px;">
                             </div>
-                        </div>
-
-                        <div class="non-standard-details" id="non-standard-details" style="display: none;">
-                            <div class="advanced-divider"></div>
-                            
-                            <div class="academic-timeline-manager">
-                                <h3>Academic Timeline</h3>
-                                <p class="timeline-help-text">Configure your academic timeline, sessions, and statuses. Use this if your semesters are delayed, extended, or completed out of sequence.</p>
-                                
-                                <div class="periods-editor-table-wrapper">
-                                    <table class="timeline-editor-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Period Name</th>
-                                                <th>Type</th>
-                                                <th>Session/Year</th>
-                                                <th>Status</th>
-                                                <th>Notes</th>
-                                                <th>Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="periods-editor-rows">
-                                            <!-- Dynamically populated periods editor -->
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div style="margin-top: 8px;">
-                                    <button type="button" class="btn btn-outline-danger btn-sm" id="add-period-btn">+ Add Academic Period</button>
-                                </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label for="calc-program-select" style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Program</label>
+                                <select id="calc-program-select" class="select-type" style="width:100%; min-height: 36px;">
+                                    <option value="mtech">M.Tech</option>
+                                </select>
                             </div>
-                            
-                            <div class="project-timeline-manager" style="margin-top: 20px;">
-                                <div class="advanced-divider"></div>
-                                <h3>Project Timeline</h3>
-                                <p class="timeline-help-text">Track M.Tech Project Phases (Phase I, Phase II, Final Submission, etc.). Note: checklist records are purely informational and do not compute grade points unless entered in the semester table.</p>
-                                
-                                <div class="project-editor-table-wrapper">
-                                    <table class="timeline-editor-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Project Event / Phase</th>
-                                                <th>Related Semester</th>
-                                                <th>Session/Year</th>
-                                                <th>Status</th>
-                                                <th>Notes</th>
-                                                <th>Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="project-editor-rows">
-                                            <!-- Dynamically populated project checklist -->
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div style="margin-top: 8px;">
-                                    <button type="button" class="btn btn-outline-danger btn-sm" id="add-project-event-btn">+ Add Project Event</button>
-                                </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label for="calc-department-select" style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Department</label>
+                                <select id="calc-department-select" class="select-type" style="width:100%; min-height: 36px;">
+                                    <option value="cse">Computer Science and Engineering</option>
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -978,19 +902,10 @@
                 <button type="button" class="btn-remove" id="close-history-edit-btn" style="font-size:1.3rem;">&times;</button>
             </div>
             <div class="modal-body" style="padding:16px 20px; max-height:70vh; overflow-y:auto;">
-                <!-- Basic student details -->
                 <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:16px;">
                     <div class="form-group">
-                        <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Student Name</label>
-                        <input type="text" id="edit-hist-name-input" class="dash-search-input" placeholder="Student Name">
-                    </div>
-                    <div class="form-group">
-                        <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Student ID / Roll Number</label>
-                        <input type="text" id="edit-hist-roll-input" class="dash-search-input" placeholder="Roll Number">
-                    </div>
-                    <div class="form-group">
-                        <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Private Nickname</label>
-                        <input type="text" id="edit-hist-nickname-input" class="dash-search-input" placeholder="Nickname">
+                        <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Result Name / Nickname</label>
+                        <input type="text" id="edit-hist-nickname-input" class="dash-search-input" placeholder="Result Name">
                     </div>
                 </div>
 
@@ -1003,49 +918,48 @@
                 <div id="edit-hist-version-display" style="font-size:0.72rem; color:var(--muted);">Version 1</div>
                 <div style="display:flex; gap:8px;">
                     <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-edit-history">Cancel</button>
-                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-save-as-new-history">Save as New</button>
                     <button type="button" class="btn btn-primary btn-sm" id="btn-save-changes-history">Save Changes</button>
                 </div>
             </div>
         </div>
-    <!-- 30. Create Profile Modal -->
+    </div>
+
+    <!-- 30. Create Result/Profile Modal -->
     <div class="modal" id="create-profile-modal" style="display:none;">
         <div class="modal-overlay"></div>
         <div class="modal-content" style="max-width:420px; width:90%;">
             <div class="modal-header">
-                <h3>Create Student Profile</h3>
+                <h3>Create New Result</h3>
                 <button type="button" class="btn-remove" id="close-profile-modal-btn" style="font-size:1.3rem;">&times;</button>
             </div>
             <div class="modal-body" style="padding:16px 20px;">
                 <div class="form-group" style="margin-bottom:12px;">
-                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Profile Nickname / Identifier *</label>
-                    <input type="text" id="new-profile-nickname" class="dash-search-input" placeholder="e.g. My M.Tech Result, Rahul, Friend 1">
+                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Result Name / Nickname *</label>
+                    <input type="text" id="new-profile-nickname" class="dash-search-input" placeholder="e.g. My M.Tech Result, Rohit's Result">
                 </div>
                 <div class="form-group" style="margin-bottom:12px;">
-                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Student Name (Optional)</label>
-                    <input type="text" id="new-profile-name" class="dash-search-input" placeholder="e.g. Rahul Kumar">
-                </div>
-                <div class="form-group" style="margin-bottom:4px;">
-                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Roll Number / Student ID (Optional)</label>
-                    <input type="text" id="new-profile-roll" class="dash-search-input" placeholder="e.g. 2314056">
+                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Whose Result?</label>
+                    <select id="new-profile-type" class="select-type" style="width:100%; min-height: 36px;">
+                        <option value="own">My Result</option>
+                        <option value="other">Someone Else's Result</option>
+                    </select>
                 </div>
                 <div class="form-group" style="margin-bottom:12px;">
-                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Department</label>
-                    <select id="new-profile-dept" class="select-type" style="width:100%; min-height: 34px;">
-                        <option value="">Select Department</option>
-                        <option value="cse">Computer Science and Engineering</option>
+                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Program</label>
+                    <select id="new-profile-prog" class="select-type" style="width:100%; min-height: 36px;">
+                        <option value="mtech">M.Tech</option>
                     </select>
                 </div>
                 <div class="form-group" style="margin-bottom:4px;">
-                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Specialization</label>
-                    <select id="new-profile-spec" class="select-type" style="width:100%; min-height: 34px;">
-                        <option value="">Select Specialization</option>
+                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Department</label>
+                    <select id="new-profile-dept" class="select-type" style="width:100%; min-height: 36px;">
+                        <option value="cse">Computer Science and Engineering</option>
                     </select>
                 </div>
             </div>
             <div class="modal-footer" style="padding:8px 20px;">
                 <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-profile-modal">Cancel</button>
-                <button type="button" class="btn btn-primary btn-sm" id="btn-save-profile-modal">Create Profile</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-save-profile-modal">Create Result</button>
             </div>
         </div>
     </div>
