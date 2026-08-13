@@ -5,9 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NITS Academic Insight</title>
     <meta name="description" content="NITS Academic Insight — Calculate and analyze SGPA, CGPA, percentage and academic performance for NIT Silchar M.Tech students.">
+    <!-- Firebase modular SDK is imported inside script.js as an ES module -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- Initial page-level Auth Loading Overlay -->
+    <div id="auth-loading-overlay">
+        <div class="auth-loading-content">
+            <img src="assets/logo-small.png" alt="NITS Academic Insight Logo" class="auth-loading-logo">
+            <div class="btn-spinner auth-loading-spinner"></div>
+            <p class="auth-loading-text">Loading NITS Academic Insight...</p>
+        </div>
+    </div>
+
     <header class="site-header">
         <div class="container header-inner">
             <div class="brand">
@@ -22,23 +32,181 @@
                 <a href="#analyzer" class="nav-link" id="nav-analyzer-btn">Result Analyzer</a>
                 <a href="#analysis" class="nav-link" id="nav-analysis-btn">Analysis</a>
                 <a href="#grade-rules" class="nav-link" id="nav-rules-btn">Grade Rules</a>
+                <a href="#history" class="nav-link" id="nav-history-btn">History</a>
             </nav>
             <div class="header-actions">
                 <button type="button" class="btn btn-outline-danger btn-sm" id="reset-btn">Reset</button>
+                <div class="profile-wrapper" id="profile-wrapper" style="display:none; position:relative;">
+                    <button type="button" class="profile-trigger" id="profile-trigger">
+                        <span class="profile-avatar" id="profile-avatar">S</span>
+                        <span class="profile-name" id="profile-name">User</span>
+                        <svg class="profile-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div class="profile-dropdown" id="profile-dropdown">
+                        <div class="profile-dropdown-header">
+                            <span class="profile-dropdown-avatar" id="profile-dropdown-avatar">S</span>
+                            <div class="profile-dropdown-info">
+                                <span class="profile-dropdown-name" id="profile-dropdown-name">User</span>
+                                <span class="profile-dropdown-email" id="profile-dropdown-email">user@email.com</span>
+                            </div>
+                        </div>
+                        <div class="profile-dropdown-divider"></div>
+                        <button type="button" class="profile-dropdown-item profile-dropdown-signout" id="pd-logout-btn">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 14H3C2.44772 14 2 13.5523 2 13V3C2 2.44772 2.44772 2 3 2H6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M10.5 11L13.5 8L10.5 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><line x1="6" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+                            Sign Out
+                        </button>
+                    </div>
+                </div>
                 <button type="button" class="hamburger" id="hamburger-menu-btn" aria-label="Toggle Navigation Menu"><span></span><span></span><span></span></button>
             </div>
         </div>
     </header>
 
     <div class="mobile-menu" id="mobile-drawer-menu">
+        <div class="mobile-user-info" id="mobile-user-info" style="display:none; padding:12px 16px; border-bottom:1px solid var(--border); font-size:0.85rem; font-weight:600; color:var(--text);"></div>
         <a href="#calculator" class="nav-link" id="mob-calc-btn">Calculator</a>
         <a href="#analyzer" class="nav-link" id="mob-analyzer-btn">Result Analyzer</a>
         <a href="#analysis" class="nav-link" id="mob-analysis-btn">Analysis</a>
         <a href="#grade-rules" class="nav-link" id="mob-rules-btn">Grade Rules</a>
+        <a href="#history" class="nav-link" id="mob-history-btn">History</a>
+        <a href="#" class="nav-link" id="mob-logout-btn" style="display:none; color:var(--primary); font-weight:700;">Sign Out</a>
     </div>
 
     <main class="main-content">
-        <section class="hero-section">
+        <!-- New Auth Wrapper -->
+        <div id="auth-container" style="display: none; padding: 40px 0;">
+            <div class="auth-box">
+                <!-- 1. LOGIN VIEW -->
+                <div id="login-view" class="auth-card">
+                    <div class="auth-header">
+                        <img src="assets/logo-small.png" alt="NIT Silchar" class="auth-logo">
+                        <h2>NITS Academic Insight</h2>
+                        <h3>Welcome Back</h3>
+                        <p class="auth-subtitle">Sign in to continue to your academic dashboard.</p>
+                    </div>
+                    <form id="login-form" novalidate>
+                        <div class="form-group">
+                            <label for="login-email">Email Address</label>
+                            <input type="email" id="login-email" required placeholder="e.g. name@example.com">
+                            <span class="error-msg" id="login-email-error"></span>
+                        </div>
+                        <div class="form-group">
+                            <label for="login-password">Password</label>
+                            <div class="password-input-wrapper">
+                                <input type="password" id="login-password" required placeholder="Enter password">
+                                <button type="button" class="btn-toggle-pwd" tabindex="-1">Show</button>
+                            </div>
+                            <span class="error-msg" id="login-password-error"></span>
+                        </div>
+                        <div class="form-row">
+                            <label class="checkbox-label" style="font-size: 0.8rem;">
+                                <input type="checkbox" id="login-remember" checked>
+                                <span class="custom-checkbox"></span> Remember me
+                            </label>
+                            <a href="#" id="to-forgot-btn" class="auth-link">Forgot password?</a>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block sign-in-btn" id="login-submit-btn">
+                            <span class="btn-text">Sign In</span>
+                            <span class="btn-spinner" style="display:none;"></span>
+                        </button>
+                    </form>
+                    <div class="auth-divider"><span>OR</span></div>
+                    <button type="button" class="btn btn-google btn-block" id="login-google-btn">
+                        <svg class="google-icon" width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59a14.5 14.5 0 0 1 0-9.18l-7.98-6.19a24.01 24.01 0 0 0 0 21.56l7.98-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                        Continue with Google
+                    </button>
+                    <div class="auth-footer">
+                        Don't have an account? <a href="#" id="to-signup-btn" class="auth-link">Create account</a>
+                    </div>
+                </div>
+
+                <!-- 2. SIGNUP VIEW -->
+                <div id="signup-view" class="auth-card" style="display: none;">
+                    <div class="auth-header">
+                        <img src="assets/logo-small.png" alt="NIT Silchar" class="auth-logo">
+                        <h2>NITS Academic Insight</h2>
+                        <h3>Create Account</h3>
+                        <p class="auth-subtitle">Get started with your academic dashboard.</p>
+                    </div>
+                    <form id="signup-form" novalidate>
+                        <div class="form-group">
+                            <label for="signup-name">Full Name</label>
+                            <input type="text" id="signup-name" required placeholder="e.g. John Doe">
+                            <span class="error-msg" id="signup-name-error"></span>
+                        </div>
+                        <div class="form-group">
+                            <label for="signup-email">Email Address</label>
+                            <input type="email" id="signup-email" required placeholder="e.g. name@example.com">
+                            <span class="error-msg" id="signup-email-error"></span>
+                        </div>
+                        <div class="form-group">
+                            <label for="signup-password">Password</label>
+                            <div class="password-input-wrapper">
+                                <input type="password" id="signup-password" required placeholder="Create password (min. 8 chars)">
+                                <button type="button" class="btn-toggle-pwd" tabindex="-1">Show</button>
+                            </div>
+                            <span class="error-msg" id="signup-password-error"></span>
+                        </div>
+                        <div class="form-group">
+                            <label for="signup-confirm-password">Confirm Password</label>
+                            <div class="password-input-wrapper">
+                                <input type="password" id="signup-confirm-password" required placeholder="Confirm password">
+                                <button type="button" class="btn-toggle-pwd" tabindex="-1">Show</button>
+                            </div>
+                            <span class="error-msg" id="signup-confirm-password-error"></span>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label" style="font-size: 0.8rem; align-items: flex-start; gap: 8px;">
+                                <input type="checkbox" id="signup-terms" required>
+                                <span class="custom-checkbox" style="margin-top: 2px;"></span>
+                                <span>I agree to the <a href="#" class="auth-link">Terms & Conditions</a> and <a href="#" class="auth-link">Privacy Policy</a></span>
+                            </label>
+                            <span class="error-msg" id="signup-terms-error" style="display:block; margin-top: 4px;"></span>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block" id="signup-submit-btn">
+                            <span class="btn-text">Create Account</span>
+                            <span class="btn-spinner" style="display:none;"></span>
+                        </button>
+                    </form>
+                    <div class="auth-divider"><span>OR</span></div>
+                    <button type="button" class="btn btn-google btn-block" id="signup-google-btn">
+                        <svg class="google-icon" width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59a14.5 14.5 0 0 1 0-9.18l-7.98-6.19a24.01 24.01 0 0 0 0 21.56l7.98-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                        Continue with Google
+                    </button>
+                    <div class="auth-footer">
+                        Already have an account? <a href="#" id="to-login-btn" class="auth-link">Sign in</a>
+                    </div>
+                </div>
+
+                <!-- 3. FORGOT PASSWORD VIEW -->
+                <div id="forgot-view" class="auth-card" style="display: none;">
+                    <div class="auth-header">
+                        <img src="assets/logo-small.png" alt="NIT Silchar" class="auth-logo">
+                        <h2>NITS Academic Insight</h2>
+                        <h3>Reset Password</h3>
+                        <p class="auth-subtitle">Enter your email address to receive a password reset link.</p>
+                    </div>
+                    <form id="forgot-form" novalidate>
+                        <div class="form-group">
+                            <label for="forgot-email">Email Address</label>
+                            <input type="email" id="forgot-email" required placeholder="e.g. name@example.com">
+                            <span class="error-msg" id="forgot-email-error"></span>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block" id="forgot-submit-btn">
+                            <span class="btn-text">Send Reset Link</span>
+                            <span class="btn-spinner" style="display:none;"></span>
+                        </button>
+                    </form>
+                    <div class="auth-footer">
+                        Remember your password? <a href="#" id="forgot-to-login-btn" class="auth-link">Sign in</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Calculator Layout -->
+        <div id="app-container" style="display: none;">
+            <section class="hero-section">
             <div class="hero-container">
                 <h1 class="hero-title">NITS Academic Insight</h1>
                 <p class="hero-description">Calculate, analyze and understand your academic performance.</p>
@@ -127,7 +295,80 @@
                         <p id="marks-method-desc" style="display:none;">Enter marks only when you need the calculator to determine the grade. Marks are normalized to 100 according to the NIT Silchar M.Tech grading rules.</p>
                     </div>
 
-                    <div class="semester-tabs">
+                    <div class="advanced-toggle-bar">
+                        <button type="button" class="advanced-toggle-btn" id="advanced-toggle-btn">
+                            Advanced options <span class="toggle-arrow">&#x25BE;</span>
+                        </button>
+                    </div>
+
+                    <div class="advanced-panel" id="advanced-panel" style="display: none;">
+                        <div class="advanced-option-row">
+                            <span class="advanced-label">Non-standard academic path?</span>
+                            <div class="toggle-buttons">
+                                <button type="button" class="toggle-btn active" id="non-standard-no-btn">No</button>
+                                <button type="button" class="toggle-btn" id="non-standard-yes-btn">Yes</button>
+                            </div>
+                        </div>
+
+                        <div class="non-standard-details" id="non-standard-details" style="display: none;">
+                            <div class="advanced-divider"></div>
+                            
+                            <div class="academic-timeline-manager">
+                                <h3>Academic Timeline</h3>
+                                <p class="timeline-help-text">Configure your academic timeline, sessions, and statuses. Use this if your semesters are delayed, extended, or completed out of sequence.</p>
+                                
+                                <div class="periods-editor-table-wrapper">
+                                    <table class="timeline-editor-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Period Name</th>
+                                                <th>Type</th>
+                                                <th>Session/Year</th>
+                                                <th>Status</th>
+                                                <th>Notes</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="periods-editor-rows">
+                                            <!-- Dynamically populated periods editor -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div style="margin-top: 8px;">
+                                    <button type="button" class="btn btn-outline-danger btn-sm" id="add-period-btn">+ Add Academic Period</button>
+                                </div>
+                            </div>
+                            
+                            <div class="project-timeline-manager" style="margin-top: 20px;">
+                                <div class="advanced-divider"></div>
+                                <h3>Project Timeline</h3>
+                                <p class="timeline-help-text">Track M.Tech Project Phases (Phase I, Phase II, Final Submission, etc.). Note: checklist records are purely informational and do not compute grade points unless entered in the semester table.</p>
+                                
+                                <div class="project-editor-table-wrapper">
+                                    <table class="timeline-editor-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Project Event / Phase</th>
+                                                <th>Related Semester</th>
+                                                <th>Session/Year</th>
+                                                <th>Status</th>
+                                                <th>Notes</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="project-editor-rows">
+                                            <!-- Dynamically populated project checklist -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div style="margin-top: 8px;">
+                                    <button type="button" class="btn btn-outline-danger btn-sm" id="add-project-event-btn">+ Add Project Event</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="semester-tabs" id="semester-tabs-container">
                         <button class="sem-tab active" data-sem="sem1" id="tab-sem1">Semester 1</button>
                         <button class="sem-tab" data-sem="sem2" id="tab-sem2">Semester 2</button>
                         <button class="sem-tab" data-sem="sem3" id="tab-sem3">Semester 3</button>
@@ -139,6 +380,7 @@
                             <thead>
                                 <tr>
                                     <th>Course</th>
+                                    <th>Subject</th>
                                     <th style="width:140px;" class="col-type">Type</th>
                                     <th style="width:80px;text-align:center;" class="col-obtained">Obtained</th>
                                     <th style="width:80px;text-align:center;" class="col-max">Max</th>
@@ -184,7 +426,7 @@
                                 <span class="divider">|</span>
                                 <button type="button" class="btn-text" id="analysis-clear-all">Clear All</button>
                             </div>
-                            <div class="checkbox-group">
+                            <div class="checkbox-group" id="selected-semesters-checkboxes">
                                 <label class="checkbox-label"><input type="checkbox" class="analysis-checkbox" data-sem="sem1" id="check-sem1"><span class="custom-checkbox"></span> Semester 1</label>
                                 <label class="checkbox-label"><input type="checkbox" class="analysis-checkbox" data-sem="sem2" id="check-sem2"><span class="custom-checkbox"></span> Semester 2</label>
                                 <label class="checkbox-label"><input type="checkbox" class="analysis-checkbox" data-sem="sem3" id="check-sem3"><span class="custom-checkbox"></span> Semester 3</label>
@@ -248,6 +490,10 @@
                     <div class="verification-panel" id="verification-panel" style="display:none;margin-top:16px;border-top:1px solid var(--border);padding-top:16px;">
                         <div class="verification-header" style="margin-bottom:12px;"><h3>Review Extracted Data</h3><span class="badge badge-w">Verification Required</span></div>
                         <div style="background:var(--warning-light);border-left:3px solid var(--warning);padding:8px 12px;font-size:0.8rem;border-radius:var(--r-sm);margin-bottom:16px;"><strong>Verification Step:</strong> Inspect details below. Once confirmed, import to fill the calculator.</div>
+                        <div id="multi-student-selector-container" style="display:none;background:var(--background);padding:12px;border:1px solid var(--border);border-radius:var(--r-md);margin-bottom:16px;align-items:center;gap:12px;">
+                            <span style="font-size:0.82rem;font-weight:700;color:var(--text);">Select Your Result (Roll Number):</span>
+                            <select id="multi-student-select" style="max-width:200px;padding:6px 12px;font-size:0.82rem;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--surface);color:var(--text);font-weight:600;"></select>
+                        </div>
                         <div class="table-container">
                             <table class="verification-table" id="verification-table">
                                 <thead><tr>
@@ -276,6 +522,102 @@
                         <div style="display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--border);padding-top:12px;">
                             <button type="button" class="btn btn-secondary btn-sm" id="cancel-extraction-btn">Cancel</button>
                             <button type="button" class="btn btn-primary btn-sm" id="confirm-import-btn">Confirm &amp; Import</button>
+                        </div>
+                    </div>
+
+                    <!-- Interactive Result Analyzer Workbench -->
+                    <div style="border-top:1px solid var(--border); padding-top:20px; margin-top:20px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+                            <div>
+                                <h3 style="margin:0; font-size:1.1rem; font-weight:700; color:var(--text-main);">Result Workbench &amp; Status Inspector</h3>
+                                <p style="margin:2px 0 0 0; font-size:0.78rem; color:var(--muted);">Check results, grade improvements, replacements, and SGPA mismatch verification.</p>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                <span style="font-size:0.8rem; font-weight:700; color:var(--text);">Active Profile:</span>
+                                <select id="analyzer-profile-select" class="select-type" style="min-height:34px; padding:4px 10px; font-weight:600; font-size:0.82rem; max-width:200px;"></select>
+                                <button type="button" class="btn btn-secondary btn-sm" id="btn-add-profile-modal" style="min-height:34px;">+ New Profile</button>
+                            </div>
+                        </div>
+
+                        <!-- Controls Bar -->
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px; background:var(--background); padding:10px 14px; border-radius:var(--r-md); border:1px solid var(--border);">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <label style="font-size:0.8rem; font-weight:700; color:var(--text-main);">Semester:</label>
+                                <select id="analyzer-sem-filter" class="select-type" style="min-height:32px; padding:2px 8px; font-size:0.8rem;">
+                                    <option value="all">All Semesters</option>
+                                    <option value="sem1">Semester 1</option>
+                                    <option value="sem2">Semester 2</option>
+                                    <option value="sem3">Semester 3</option>
+                                    <option value="sem4">Semester 4</option>
+                                </select>
+                            </div>
+                            <button type="button" class="btn btn-outline-danger btn-sm" id="analyzer-add-course-btn" style="min-height:32px;">+ Add Course Row</button>
+                        </div>
+
+                        <!-- Workbench Table -->
+                        <div class="table-container" style="margin-bottom:16px;">
+                            <table class="subjects-table" id="analyzer-courses-table" style="width:100%;">
+                                <thead>
+                                    <tr>
+                                        <th style="width:110px;">Course Code</th>
+                                        <th>Subject Name</th>
+                                        <th style="width:70px; text-align:center;">Credits</th>
+                                        <th style="width:90px; text-align:center;">Grade</th>
+                                        <th style="width:50px; text-align:center;">GP</th>
+                                        <th style="width:140px;">Course Status</th>
+                                        <th style="width:90px; text-align:center;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="analyzer-courses-tbody">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Grade Improvement / Replacement Impact Box -->
+                        <div id="analyzer-impact-card" class="impact-summary-card" style="display:none; background:var(--background); border:1px dashed var(--primary); padding:14px; border-radius:var(--r-md); margin-bottom:16px;">
+                            <h4 style="margin:0 0 8px 0; font-size:0.85rem; font-weight:700; color:var(--primary);">Grade Improvement / Replacement Impact Calculation</h4>
+                            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:12px;">
+                                <div><span style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; display:block;">Original SGPA</span><span id="impact-old-sgpa" style="font-size:1.1rem; font-weight:700;">&mdash;</span></div>
+                                <div><span style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; display:block;">Updated SGPA</span><span id="impact-new-sgpa" style="font-size:1.1rem; font-weight:800; color:var(--primary);">&mdash;</span></div>
+                                <div><span style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; display:block;">Net SGPA Change</span><span id="impact-delta-sgpa" style="font-size:1.1rem; font-weight:800; color:var(--success);">&mdash;</span></div>
+                                <div><span style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; display:block;">Credits Affected</span><span id="impact-credits-count" style="font-size:1.1rem; font-weight:700;">&mdash;</span></div>
+                            </div>
+                        </div>
+
+                        <!-- Verification & Summary Cards -->
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; margin-bottom:16px;">
+                            <!-- System Calculated Summary -->
+                            <div style="background:var(--background); border:1px solid var(--border); padding:14px; border-radius:var(--r-md);">
+                                <h4 style="margin:0 0 8px 0; font-size:0.75rem; text-transform:uppercase; color:var(--muted); font-weight:700;">Calculated Metrics Summary</h4>
+                                <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="font-size:0.8rem; color:var(--muted);">Calculated SGPA:</span><strong id="analyzer-calc-sgpa" style="color:var(--primary); font-size:1.05rem;">&mdash;</strong></div>
+                                <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="font-size:0.8rem; color:var(--muted);">Total Credits Earned:</span><strong id="analyzer-calc-credits">&mdash;</strong></div>
+                                <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="font-size:0.8rem; color:var(--muted);">Passed / Failed Courses:</span><span style="font-size:0.8rem;"><strong id="analyzer-calc-passed" style="color:var(--success);">0</strong> / <strong id="analyzer-calc-failed" style="color:var(--danger);">0</strong></span></div>
+                            </div>
+
+                            <!-- Result Verification Card -->
+                            <div style="background:var(--background); border:1px solid var(--border); padding:14px; border-radius:var(--r-md);">
+                                <h4 style="margin:0 0 8px 0; font-size:0.75rem; text-transform:uppercase; color:var(--muted); font-weight:700;">Result Verification Check</h4>
+                                <div style="margin-bottom:8px;">
+                                    <input type="number" step="any" id="analyzer-official-sgpa-input" class="dash-search-input" style="min-height:34px; padding:4px 8px; font-size:0.82rem;" placeholder="Enter Official/Reported SGPA">
+                                </div>
+                                <div id="analyzer-verification-badge" style="font-size:0.8rem; font-weight:700; padding:8px 10px; border-radius:var(--r-sm); background:var(--surface); border:1px solid var(--border); text-align:center;">
+                                    Enter reported SGPA &amp; click "Verify Result"
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Workbench Action Buttons -->
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; border-top:1px solid var(--border); padding-top:14px;">
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                <button type="button" class="btn btn-secondary btn-sm" id="btn-verify-result">Verify Result</button>
+                                <button type="button" class="btn btn-secondary btn-sm" id="btn-calculate-impact">Calculate Impact</button>
+                            </div>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                <button type="button" class="btn btn-outline-danger btn-sm" id="btn-analyzer-export-csv">Export CSV</button>
+                                <button type="button" class="btn btn-primary btn-sm" id="btn-analyzer-download-pdf">Download Report</button>
+                                <button type="button" class="btn btn-primary btn-sm" id="btn-analyzer-save-history">Save to History</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -380,6 +722,65 @@
                     </div>
                 </div>
             </section>
+
+            <!-- 26. Academic History Section -->
+            <section class="history-section" id="history">
+                <div class="analyzer-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                        <div>
+                            <h3 style="margin:0; font-size: 1.25rem;">Academic History</h3>
+                            <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: var(--muted);">Your saved calculations and viewed student records</p>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button type="button" class="btn btn-primary btn-sm" id="save-current-history-btn" style="min-height: 36px;">Save Current Calculation</button>
+                        </div>
+                    </div>
+
+                    <!-- Look Up Student ID -->
+                    <div style="background:var(--background); border: 1px solid var(--border); padding: 16px; border-radius: var(--r-md); margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 8px 0; font-size: 0.85rem; font-weight: 700; color: var(--text-main);">View Another Student's Record</h4>
+                        <p style="margin: 0 0 12px 0; font-size: 0.78rem; color: var(--muted);">Enter another student's Roll Number / Student ID to search and analyze their record.</p>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                            <input type="text" id="lookup-student-id" class="dash-search-input" style="max-width: 260px; min-height: 36px;" placeholder="e.g. 2314056">
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-lookup-student" style="min-height: 36px;">Look Up Student</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Search & Filter Controls -->
+                    <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
+                        <div style="flex: 1; min-width: 200px; position: relative;">
+                            <input type="text" class="dash-search-input" id="history-search-input" placeholder="Search history by name, nickname, course code or subject...">
+                        </div>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <select class="select-type" id="history-filter-type" style="min-height: 36px; padding: 4px 8px; font-size: 0.82rem;">
+                                <option value="all">All Records</option>
+                                <option value="own">My Records</option>
+                                <option value="viewed">Viewed Records</option>
+                                <option value="recent">Recently Updated</option>
+                            </select>
+                            <select class="select-type" id="history-sort" style="min-height: 36px; padding: 4px 8px; font-size: 0.82rem;">
+                                <option value="newest">Newest First</option>
+                                <option value="oldest">Oldest First</option>
+                                <option value="updated">Recently Updated</option>
+                                <option value="name">Student Name</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- History Items Container -->
+                    <div id="history-items-container" class="history-list" style="display: flex; flex-direction: column; gap: 12px;">
+                        <!-- Dynamically populated card rows -->
+                    </div>
+
+                    <!-- Empty State -->
+                    <div class="empty-state" id="history-empty-state" style="display: none; text-align: center; padding: 30px 16px;">
+                        <span class="empty-state-icon" style="font-size: 2.5rem; display: block; margin-bottom: 8px;">📋</span>
+                        <p class="empty-state-text" style="font-weight: 700; margin-bottom: 4px;">No saved history yet</p>
+                        <p class="empty-state-sub" style="color: var(--muted); font-size: 0.8rem; margin-bottom: 12px;">Your saved calculations and viewed student records will appear here.</p>
+                        <button type="button" class="btn btn-primary btn-sm" id="history-start-calc-btn">Start Calculating</button>
+                    </div>
+                </div>
+            </section>
         </div>
 
         <section class="grade-rules-section" id="grade-rules">
@@ -444,6 +845,7 @@
                 <div class="rules-disclaimer">Always verify final academic results against official NIT Silchar records.</div>
             </div>
         </section>
+        </div>
     </main>
 
     <footer class="footer">
@@ -458,7 +860,154 @@
     <div class="modal" id="linking-modal" style="display:none;"><div class="modal-overlay"></div><div class="modal-content"><div class="modal-header"><h3>Link Course Attempts</h3></div><div class="modal-body"><div class="form-group" style="margin-bottom:0.8rem;"><label style="font-weight:600;font-size:0.8rem;display:block;margin-bottom:0.2rem;">Original / Parent Course</label><select id="link-parent-select" class="select-type" style="width:100%;"></select></div><div class="form-group" style="margin-bottom:0.8rem;"><label style="font-weight:600;font-size:0.8rem;display:block;margin-bottom:0.2rem;">Newer Attempt Course</label><select id="link-child-select" class="select-type" style="width:100%;"></select></div><div class="form-group"><label style="font-weight:600;font-size:0.8rem;display:block;margin-bottom:0.2rem;">Attempt Type</label><select id="link-type-select" class="select-type" style="width:100%;"><option value="supplementary">Supplementary</option><option value="re-examination">Re-examination</option><option value="improvement">Improvement</option></select></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" id="cancel-link-btn">Cancel</button><button type="button" class="btn btn-primary btn-sm" id="confirm-link-btn">Confirm Link</button></div></div></div>
     <div class="modal" id="subject-detail-panel" style="display:none;"><div class="modal-overlay"></div><div class="modal-content" style="max-width:500px;"><div class="modal-header" style="padding:12px 20px;"><h3 id="detail-course-title" style="margin:0;">Course Detail &amp; History</h3><button type="button" class="btn-remove" id="close-detail-btn" style="font-size:1.3rem;">&times;</button></div><div class="modal-body" style="padding:16px 20px;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;"><div><span style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;">Course Code</span><div id="detail-code" style="font-size:1rem;font-weight:700;">CS5106</div></div><div><span style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;">Credits</span><div id="detail-credits" style="font-size:1rem;font-weight:700;">4</div></div><div style="grid-column:span 2;"><span style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;">Course Name</span><div id="detail-name" style="font-size:0.9rem;font-weight:600;">-</div></div></div><h4 style="font-size:0.8rem;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Attempt Timeline</h4><div id="detail-timeline-container" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div><div id="detail-audit-box" style="padding:8px 12px;font-size:0.8rem;border-radius:0 4px 4px 0;border-left-width:3px;margin-bottom:12px;"></div><div class="form-group" style="margin-bottom:12px;" id="detail-attempt-container"><label style="font-weight:600;font-size:0.72rem;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:4px;">Edit Attempt Type</label><select id="detail-attempt-type-select" class="select-type" style="width:100%;min-height:32px;padding:4px 8px;"><option value="original">Original</option><option value="supplementary">Supplementary</option><option value="re-examination">Re-examination</option><option value="improvement">Improvement</option></select></div><div style="background:var(--background);border:1px solid var(--border);padding:10px;border-radius:var(--r-md);display:flex;justify-content:space-between;align-items:center;"><div><span style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;display:block;">Final Applicable Grade</span><span id="detail-final-grade" style="font-size:1.3rem;font-weight:800;color:var(--primary);">BB</span><span id="detail-final-gp" style="font-size:0.8rem;color:var(--muted);margin-left:4px;">(GP: 8)</span></div><div><span style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;display:block;text-align:right;">Status</span><span id="detail-final-status" class="status-text status-text-passed" style="font-size:0.85rem;font-weight:700;">Cleared</span></div></div></div><div class="modal-footer" style="padding:8px 20px;"><button type="button" class="btn btn-outline-danger btn-sm" id="detail-unlink-btn" style="display:none;">Unlink Attempts</button><button type="button" class="btn btn-secondary btn-sm" id="detail-close-btn">Close</button></div></div></div>
     <div class="modal" id="confirm-modal" style="display:none;"><div class="modal-overlay"></div><div class="modal-content"><div class="modal-header"><h3 id="confirm-modal-title">Confirm Action</h3><button type="button" class="btn-remove" id="confirm-modal-close" style="font-size:1.3rem;">&times;</button></div><div class="modal-body"><p id="confirm-modal-msg">Are you sure?</p></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" id="confirm-modal-cancel">Cancel</button><button type="button" class="btn btn-primary btn-sm" id="confirm-modal-ok">Confirm</button></div></div></div>
+
+    <!-- 27. Save History Dialog Modal -->
+    <div class="modal" id="save-history-modal" style="display:none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content" style="max-width:420px; width:90%;">
+            <div class="modal-header">
+                <h3>Save Snapshot to History</h3>
+                <button type="button" class="btn-remove" id="close-save-history-modal-btn" style="font-size:1.3rem;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding:16px 20px;">
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Record Type</label>
+                    <select id="save-history-source-type" class="select-type" style="width:100%;">
+                        <option value="own">This is my own academic record</option>
+                        <option value="viewed">This is another student's record</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Student Name</label>
+                    <input type="text" id="save-history-name-input" class="dash-search-input" placeholder="e.g. Rahul Kumar">
+                </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Student ID / Roll Number</label>
+                    <input type="text" id="save-history-roll-input" class="dash-search-input" placeholder="e.g. 2314056">
+                </div>
+                <div class="form-group" style="margin-bottom: 4px;">
+                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Private Nickname (Optional)</label>
+                    <input type="text" id="save-history-nickname-input" class="dash-search-input" placeholder="e.g. Roommate, Rahul">
+                </div>
+            </div>
+            <div class="modal-footer" style="padding:8px 20px;">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-save-history-modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-confirm-save-history-modal">Save Record</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 28. History Details Modal -->
+    <div class="modal" id="history-detail-modal" style="display:none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content" style="max-width:760px; width:95%;">
+            <div class="modal-header" style="padding:12px 20px;">
+                <h3 id="hist-detail-title" style="margin:0;">Academic Record Detail</h3>
+                <button type="button" class="btn-remove" id="close-hist-detail-btn" style="font-size:1.3rem;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding:16px 20px; max-height:70vh; overflow-y:auto;">
+                <!-- Student Info Card -->
+                <div style="background:var(--background); border: 1px solid var(--border); padding: 12px 16px; border-radius: var(--r-md); margin-bottom: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+                    <div><span style="font-size:0.7rem; color:var(--muted); text-transform:uppercase; display:block;">Student Name</span><span id="hist-detail-name" style="font-weight:700;">-</span></div>
+                    <div><span style="font-size:0.7rem; color:var(--muted); text-transform:uppercase; display:block;">Student ID / Roll No</span><span id="hist-detail-roll" style="font-weight:700;">-</span></div>
+                    <div><span style="font-size:0.7rem; color:var(--muted); text-transform:uppercase; display:block;">Nickname</span><span id="hist-detail-nickname" style="font-weight:700;">-</span></div>
+                    <div><span style="font-size:0.7rem; color:var(--muted); text-transform:uppercase; display:block;">Record Type</span><span id="hist-detail-badge" class="history-card-badge badge-own">-</span></div>
+                </div>
+
+                <!-- Academic Summary Metrics -->
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:12px; margin-bottom:20px;">
+                    <div style="border: 1px solid var(--border); padding: 10px; border-radius: var(--r-sm); text-align:center;"><span style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; display:block;">CGPA</span><span id="hist-detail-cgpa" style="font-size:1.2rem; font-weight:800; color:var(--primary);">&mdash;</span></div>
+                    <div style="border: 1px solid var(--border); padding: 10px; border-radius: var(--r-sm); text-align:center;"><span style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; display:block;">Percentage</span><span id="hist-detail-pct" style="font-size:1.2rem; font-weight:800;">&mdash;</span></div>
+                    <div style="border: 1px solid var(--border); padding: 10px; border-radius: var(--r-sm); text-align:center;"><span style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; display:block;">Total Credits</span><span id="hist-detail-credits" style="font-size:1.2rem; font-weight:800;">&mdash;</span></div>
+                    <div style="border: 1px solid var(--border); padding: 10px; border-radius: var(--r-sm); text-align:center;"><span style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; display:block;">Active Backlogs</span><span id="hist-detail-backlogs" style="font-size:1.2rem; font-weight:800;">&mdash;</span></div>
+                </div>
+
+                <!-- Semesters breakdown -->
+                <div id="hist-detail-semesters-wrapper" style="display:flex; flex-direction:column; gap:20px;">
+                    <!-- Semester blocks dynamically built -->
+                </div>
+            </div>
+            <div class="modal-footer" style="padding:12px 20px; display:flex; justify-content:space-between; align-items:center;">
+                <div id="hist-detail-version-info" style="font-size:0.72rem; color:var(--muted);">Version 1</div>
+                <div style="display:flex; gap:8px;">
+                    <button type="button" class="btn btn-outline-danger btn-sm" id="btn-hist-detail-csv">Export CSV</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="btn-hist-detail-pdf">Download Report</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-hist-detail-close">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 29. History Edit Modal -->
+    <div class="modal" id="history-edit-modal" style="display:none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content" style="max-width:840px; width:95%;">
+            <div class="modal-header" style="padding:12px 20px;">
+                <h3>Edit Academic Snapshot</h3>
+                <button type="button" class="btn-remove" id="close-history-edit-btn" style="font-size:1.3rem;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding:16px 20px; max-height:70vh; overflow-y:auto;">
+                <!-- Basic student details -->
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:16px;">
+                    <div class="form-group">
+                        <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Student Name</label>
+                        <input type="text" id="edit-hist-name-input" class="dash-search-input" placeholder="Student Name">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Student ID / Roll Number</label>
+                        <input type="text" id="edit-hist-roll-input" class="dash-search-input" placeholder="Roll Number">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Private Nickname</label>
+                        <input type="text" id="edit-hist-nickname-input" class="dash-search-input" placeholder="Nickname">
+                    </div>
+                </div>
+
+                <!-- Semester blocks course table list -->
+                <div id="edit-hist-courses-editor" style="display:flex; flex-direction:column; gap:16px;">
+                    <!-- Dynamically populated tables for each semester -->
+                </div>
+            </div>
+            <div class="modal-footer" style="padding:12px 20px; display:flex; justify-content:space-between; align-items:center;">
+                <div id="edit-hist-version-display" style="font-size:0.72rem; color:var(--muted);">Version 1</div>
+                <div style="display:flex; gap:8px;">
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-edit-history">Cancel</button>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-save-as-new-history">Save as New</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="btn-save-changes-history">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    <!-- 30. Create Profile Modal -->
+    <div class="modal" id="create-profile-modal" style="display:none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content" style="max-width:420px; width:90%;">
+            <div class="modal-header">
+                <h3>Create Student Profile</h3>
+                <button type="button" class="btn-remove" id="close-profile-modal-btn" style="font-size:1.3rem;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding:16px 20px;">
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Profile Nickname / Identifier *</label>
+                    <input type="text" id="new-profile-nickname" class="dash-search-input" placeholder="e.g. My M.Tech Result, Rahul, Friend 1">
+                </div>
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Student Name (Optional)</label>
+                    <input type="text" id="new-profile-name" class="dash-search-input" placeholder="e.g. Rahul Kumar">
+                </div>
+                <div class="form-group" style="margin-bottom:4px;">
+                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Roll Number / Student ID (Optional)</label>
+                    <input type="text" id="new-profile-roll" class="dash-search-input" placeholder="e.g. 2314056">
+                </div>
+            </div>
+            <div class="modal-footer" style="padding:8px 20px;">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-profile-modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-save-profile-modal">Create Profile</button>
+            </div>
+        </div>
+    </div>
+
     <div class="toast-container" id="toast-container" aria-live="polite"></div>
-    <script src="script.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script type="module" src="script.js"></script>
 </body>
 </html>

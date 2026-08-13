@@ -1,3 +1,25 @@
+# Dependencies
 node_modules/
-uploads/
+
+# Environment variables — NEVER commit these
 .env
+.env.local
+.env*.local
+
+# Temporary uploads directory (local dev only)
+uploads/
+
+# Firebase Hosting (not used for deployment — Vercel is the host)
+firebase.json
+.firebaserc
+
+# Local-only Windows autostart scripts
+start-server.bat
+start-server-hidden.vbs
+install-autostart.ps1
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+*.log

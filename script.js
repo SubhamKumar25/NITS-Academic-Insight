@@ -4,10 +4,45 @@
  * Fully functional Vanilla JavaScript logic
  */
 
+// Firebase modular SDK imports (loaded via ES module)
+import {
+    initializeFirebase,
+    getFirebaseAuth,
+    getFirebaseDb,
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    signOut,
+    sendPasswordResetEmail,
+    signInWithPopup,
+    GoogleAuthProvider,
+    browserLocalPersistence,
+    browserSessionPersistence,
+    setPersistence,
+    onAuthStateChanged,
+    updateProfile,
+    doc,
+    setDoc,
+    getDoc,
+    serverTimestamp,
+    collection,
+    addDoc,
+    getDocs,
+    deleteDoc,
+    updateDoc,
+    query,
+    where,
+    orderBy
+} from './src/firebase/config.js';
+
 // Application State
 const state = {
     calculationMethod: 'grade', // 'grade' or 'marks'
     activeSemester: 'sem1', // Current visible semester (sem1, sem2, sem3, sem4)
+    auth: {
+        loading: true,
+        user: null,
+        mode: 'mock'
+    },
     semesters: {
         sem1: [], // Array of courses: { id, code, courseType, obtainedMarks, maximumMarks, credits, grade, gradeSource, manualGrade, attemptType, parentCourseId, documentType, source }
         sem2: [],
@@ -184,7 +219,70 @@ const dom = {
     dashSourceIndicator: document.getElementById('dash-source-indicator'),
     dashQualityIndicator: document.getElementById('dash-quality-indicator'),
     insightsListContainer: document.getElementById('insights-list-container'),
-    printAnalysisBtn: document.getElementById('print-analysis-btn')
+    printAnalysisBtn: document.getElementById('print-analysis-btn'),
+    
+    // Auth elements
+    authContainer: document.getElementById('auth-container'),
+    appContainer: document.getElementById('app-container'),
+    loginView: document.getElementById('login-view'),
+    signupView: document.getElementById('signup-view'),
+    forgotView: document.getElementById('forgot-view'),
+    loginForm: document.getElementById('login-form'),
+    signupForm: document.getElementById('signup-form'),
+    forgotForm: document.getElementById('forgot-form'),
+    mobLogoutBtn: document.getElementById('mob-logout-btn'),
+    mobileUserInfo: document.getElementById('mobile-user-info'),
+
+    // Part 25+ History Elements
+    historySection: document.getElementById('history'),
+    saveCurrentHistoryBtn: document.getElementById('save-current-history-btn'),
+    historySearchInput: document.getElementById('history-search-input'),
+    historyFilterType: document.getElementById('history-filter-type'),
+    historySort: document.getElementById('history-sort'),
+    historyItemsContainer: document.getElementById('history-items-container'),
+    historyEmptyState: document.getElementById('history-empty-state'),
+    historyStartCalcBtn: document.getElementById('history-start-calc-btn'),
+    lookupStudentId: document.getElementById('lookup-student-id'),
+    btnLookupStudent: document.getElementById('btn-lookup-student'),
+    
+    // Save History Modal
+    saveHistoryModal: document.getElementById('save-history-modal'),
+    closeSaveHistoryModalBtn: document.getElementById('close-save-history-modal-btn'),
+    saveHistorySourceType: document.getElementById('save-history-source-type'),
+    saveHistoryNameInput: document.getElementById('save-history-name-input'),
+    saveHistoryRollInput: document.getElementById('save-history-roll-input'),
+    saveHistoryNicknameInput: document.getElementById('save-history-nickname-input'),
+    btnCancelSaveHistoryModal: document.getElementById('btn-cancel-save-history-modal'),
+    btnConfirmSaveHistoryModal: document.getElementById('btn-confirm-save-history-modal'),
+
+    // History Details Modal
+    historyDetailModal: document.getElementById('history-detail-modal'),
+    closeHistDetailBtn: document.getElementById('close-hist-detail-btn'),
+    histDetailName: document.getElementById('hist-detail-name'),
+    histDetailRoll: document.getElementById('hist-detail-roll'),
+    histDetailNickname: document.getElementById('hist-detail-nickname'),
+    histDetailBadge: document.getElementById('hist-detail-badge'),
+    histDetailCgpa: document.getElementById('hist-detail-cgpa'),
+    histDetailPct: document.getElementById('hist-detail-pct'),
+    histDetailCredits: document.getElementById('hist-detail-credits'),
+    histDetailBacklogs: document.getElementById('hist-detail-backlogs'),
+    histDetailSemestersWrapper: document.getElementById('hist-detail-semesters-wrapper'),
+    histDetailVersionInfo: document.getElementById('hist-detail-version-info'),
+    btnHistDetailCsv: document.getElementById('btn-hist-detail-csv'),
+    btnHistDetailPdf: document.getElementById('btn-hist-detail-pdf'),
+    btnHistDetailClose: document.getElementById('btn-hist-detail-close'),
+
+    // History Edit Modal
+    historyEditModal: document.getElementById('history-edit-modal'),
+    closeHistoryEditBtn: document.getElementById('close-history-edit-btn'),
+    editHistNameInput: document.getElementById('edit-hist-name-input'),
+    editHistRollInput: document.getElementById('edit-hist-roll-input'),
+    editHistNicknameInput: document.getElementById('edit-hist-nickname-input'),
+    editHistCoursesEditor: document.getElementById('edit-hist-courses-editor'),
+    editHistVersionDisplay: document.getElementById('edit-hist-version-display'),
+    btnCancelEditHistory: document.getElementById('btn-cancel-edit-history'),
+    btnSaveAsNewHistory: document.getElementById('btn-save-as-new-history'),
+    btnSaveChangesHistory: document.getElementById('btn-save-changes-history')
 };
 
 // Initial setup
@@ -193,6 +291,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initAnalyzerEvents();
     initAttemptEvents();
     render();
+    initAuth();
+    initHistorySystem();
 });
 
 // Initialize All UI Event Listeners
@@ -303,6 +403,9 @@ function renderSubjectRows() {
                 <td data-label="Course" class="course-cell">
                     <input type="text" class="input-code" placeholder="Course Code" value="${course.code}">
                 </td>
+                <td data-label="Subject" class="subject-cell">
+                    <input type="text" class="input-subject" placeholder="Subject Name" value="${course.subject || ''}">
+                </td>
                 <td data-label="Type" class="type-cell">
                     <select class="select-type">
                         <option value="">Select Type</option>
@@ -349,6 +452,9 @@ function renderSubjectRows() {
             tr.innerHTML = `
                 <td data-label="Course" class="course-cell">
                     <input type="text" class="input-code" placeholder="Course Code" value="${course.code}">
+                </td>
+                <td data-label="Subject" class="subject-cell">
+                    <input type="text" class="input-subject" placeholder="Subject Name" value="${course.subject || ''}">
                 </td>
                 <td data-label="Type" class="type-cell">
                     <select class="select-type">
@@ -399,6 +505,13 @@ function renderSubjectRows() {
         if (inputCode) {
             inputCode.addEventListener('input', (e) => {
                 updateCourse(course.id, 'code', e.target.value);
+            });
+        }
+
+        const inputSubject = tr.querySelector('.input-subject');
+        if (inputSubject) {
+            inputSubject.addEventListener('input', (e) => {
+                updateCourse(course.id, 'subject', e.target.value);
             });
         }
 
@@ -464,6 +577,7 @@ function addSubject(semId) {
     const newCourse = {
         id: 'course_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
         code: '',
+        subject: '',
         courseType: '', 
         obtainedMarks: null,
         maximumMarks: null,
@@ -861,6 +975,11 @@ function calculateAndRefresh() {
 
     // 6. Sync Academic Analysis Dashboard — must always reflect current state
     renderDashboard();
+
+    // 7. Sync Result Analyzer Workbench — single source of truth
+    if (typeof renderAnalyzerWorkbench === 'function') {
+        renderAnalyzerWorkbench();
+    }
 }
 
 // Calculate individual semester data using final resolved dataset
@@ -1972,6 +2091,7 @@ function resolveDuplicate(choice) {
     if (choice === 'overwrite') {
         // Use uploaded data -> Update fields in-place
         existing.code = imported.code;
+        existing.subject = imported.name || '';
         existing.courseType = imported.courseType;
         existing.obtainedMarks = imported.obtainedMarks;
         existing.maximumMarks = imported.maximumMarks;
@@ -1998,6 +2118,7 @@ function importCourse(sub) {
     const newCourse = {
         id: 'course_' + Date.now() + '_' + Math.floor(Math.random() * 1000) + '_' + importQueue.currentIndex,
         code: sub.code,
+        subject: sub.name || '',
         courseType: sub.courseType,
         obtainedMarks: sub.obtainedMarks,
         maximumMarks: sub.maximumMarks,
@@ -2323,7 +2444,7 @@ window.openSubjectDetailModal = function(courseId) {
 
     if (codeEl) codeEl.textContent = course.code.toUpperCase();
     if (creditsEl) creditsEl.textContent = course.credits !== null ? course.credits : '—';
-    if (nameEl) nameEl.textContent = course.name || 'Course Name';
+    if (nameEl) nameEl.textContent = course.subject || 'Course Name';
 
     if (timelineContainer) timelineContainer.innerHTML = '';
 
@@ -3200,7 +3321,8 @@ function initMobileMenu() {
     const mobileMenu = document.getElementById('mobile-drawer-menu');
     
     if (hamburgerBtn && mobileMenu) {
-        hamburgerBtn.addEventListener('click', () => {
+        hamburgerBtn.addEventListener('click', e => {
+            e.stopPropagation();
             hamburgerBtn.classList.toggle('open');
             mobileMenu.classList.toggle('open');
         });
@@ -3210,6 +3332,13 @@ function initMobileMenu() {
                 hamburgerBtn.classList.remove('open');
                 mobileMenu.classList.remove('open');
             });
+        });
+
+        window.addEventListener('resize', () => {
+            if (window.innerWidth >= 768) {
+                hamburgerBtn.classList.remove('open');
+                mobileMenu.classList.remove('open');
+            }
         });
     }
 }
@@ -3328,3 +3457,2103 @@ function toggleCalculatorMode() {
         }
     }
 }
+
+// PART 7: AUTHENTICATION (LOGIN, SIGNUP, RESET, FIREBASE & MOCK)
+// ==============================================================
+
+// Helper to translate Firebase Auth error codes into descriptive user-friendly texts
+function getAuthErrorMessage(error) {
+    if (!error) return "An unexpected error occurred. Please try again.";
+    
+    switch (error.code) {
+        case 'auth/invalid-credential':
+        case 'auth/wrong-password':
+            return "Incorrect password. Please verify and try again.";
+        case 'auth/user-not-found':
+            return "No account exists with this email address. Please create an account.";
+        case 'auth/invalid-email':
+            return "The email address is invalid. Please double-check formatting.";
+        case 'auth/too-many-requests':
+            return "Too many unsuccessful requests. Access has been temporarily disabled. Please wait and try again later.";
+        case 'auth/network-request-failed':
+            return "A network error occurred. Please check your internet connection and try again.";
+        case 'auth/email-already-in-use':
+            return "This email address is already registered. Please sign in instead.";
+        case 'auth/weak-password':
+            return "The password is too weak. It must be at least 8 characters long.";
+        case 'auth/user-disabled':
+            return "This user account has been disabled by an administrator.";
+        case 'auth/operation-not-allowed':
+            return "This authentication provider is not enabled in the Firebase Console.";
+        case 'auth/popup-closed-by-user':
+            return "Google sign-in popup was closed before completing. Please try again.";
+        case 'auth/popup-blocked':
+            return "Popup was blocked by your browser. Please allow popups for this site.";
+        default:
+            return error.message || "Authentication failed. Please check your credentials.";
+    }
+}
+
+// Global AuthService Wrapper - uses Firebase modular SDK when config is available, falls back to mock
+window.AuthService = {
+    getUser: () => state.auth.user,
+    isLoading: () => state.auth.loading,
+    
+    login: (email, password, remember) => {
+        if (state.auth.mode === 'firebase') {
+            const auth = getFirebaseAuth();
+            const persistence = remember ? browserLocalPersistence : browserSessionPersistence;
+            return setPersistence(auth, persistence)
+                .then(() => signInWithEmailAndPassword(auth, email, password));
+        } else {
+            // Mock Mode Sign In Promise
+            return new Promise((resolve, reject) => {
+                setTimeout(() => {
+                    const users = JSON.parse(localStorage.getItem('nits_mock_users_list') || '[]');
+                    const user = users.find(u => u.email === email && u.password === password);
+                    if (user) {
+                        const sessionUser = { uid: user.uid, email: user.email, name: user.name, photoURL: null };
+                        if (remember) {
+                            localStorage.setItem('nits_mock_user', JSON.stringify(sessionUser));
+                        } else {
+                            sessionStorage.setItem('nits_mock_user', JSON.stringify(sessionUser));
+                        }
+                        handleAuthState(sessionUser);
+                        resolve(sessionUser);
+                    } else {
+                        reject({ code: 'auth/invalid-credential', message: 'Invalid credentials in local mock database.' });
+                    }
+                }, 800);
+            });
+        }
+    },
+    
+    signup: (name, email, password) => {
+        if (state.auth.mode === 'firebase') {
+            const auth = getFirebaseAuth();
+            const db = getFirebaseDb();
+            return createUserWithEmailAndPassword(auth, email, password)
+                .then(cred => {
+                    const user = cred.user;
+                    return updateProfile(user, { displayName: name })
+                        .then(() => {
+                            // Store user profile under users/{uid} in Firestore
+                            return setDoc(doc(db, 'users', user.uid), {
+                                uid: user.uid,
+                                name: name,
+                                email: email,
+                                photoURL: null,
+                                createdAt: serverTimestamp(),
+                                updatedAt: serverTimestamp()
+                            });
+                        });
+                });
+        } else {
+            // Mock Mode Sign Up Promise
+            return new Promise((resolve, reject) => {
+                setTimeout(() => {
+                    const users = JSON.parse(localStorage.getItem('nits_mock_users_list') || '[]');
+                    if (users.some(u => u.email === email)) {
+                        reject({ code: 'auth/email-already-in-use', message: 'Email address is already registered in local mock database.' });
+                        return;
+                    }
+                    const newUser = {
+                        uid: 'mock_uid_' + Date.now(),
+                        name: name,
+                        email: email,
+                        password: password
+                    };
+                    users.push(newUser);
+                    localStorage.setItem('nits_mock_users_list', JSON.stringify(users));
+                    
+                    const sessionUser = { uid: newUser.uid, email: newUser.email, name: newUser.name, photoURL: null };
+                    localStorage.setItem('nits_mock_user', JSON.stringify(sessionUser));
+                    handleAuthState(sessionUser);
+                    resolve(sessionUser);
+                }, 800);
+            });
+        }
+    },
+    
+    loginWithGoogle: () => {
+        if (state.auth.mode === 'firebase') {
+            const auth = getFirebaseAuth();
+            const db = getFirebaseDb();
+            const provider = new GoogleAuthProvider();
+            return signInWithPopup(auth, provider)
+                .then(async (result) => {
+                    const user = result.user;
+                    const userDocRef = doc(db, 'users', user.uid);
+                    const userSnap = await getDoc(userDocRef);
+                    if (!userSnap.exists()) {
+                        await setDoc(userDocRef, {
+                            uid: user.uid,
+                            name: user.displayName || 'Google User',
+                            email: user.email,
+                            photoURL: user.photoURL || null,
+                            createdAt: serverTimestamp(),
+                            updatedAt: serverTimestamp()
+                        });
+                    }
+                    return user;
+                });
+        } else {
+            // Mock Google Login Promise
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    const mockGoogleUser = {
+                        uid: 'mock_google_uid_123',
+                        name: 'Google User',
+                        email: 'googleuser@nits.ac.in',
+                        photoURL: null
+                    };
+                    localStorage.setItem('nits_mock_user', JSON.stringify(mockGoogleUser));
+                    handleAuthState(mockGoogleUser);
+                    resolve(mockGoogleUser);
+                }, 500);
+            });
+        }
+    },
+    
+    logout: () => {
+        if (state.auth.mode === 'firebase') {
+            return signOut(getFirebaseAuth());
+        } else {
+            return new Promise((resolve) => {
+                localStorage.removeItem('nits_mock_user');
+                sessionStorage.removeItem('nits_mock_user');
+                handleAuthState(null);
+                resolve();
+            });
+        }
+    },
+    
+    resetPassword: (email) => {
+        if (state.auth.mode === 'firebase') {
+            return sendPasswordResetEmail(getFirebaseAuth(), email);
+        } else {
+            return new Promise((resolve) => {
+                setTimeout(() => resolve(), 500);
+            });
+        }
+    }
+};
+
+function initAuth() {
+    // Safety fallback: Guarantee loading overlay hides after 1.5s max even if network/auth latency occurs
+    const overlayTimeout = setTimeout(() => {
+        hideLoadingOverlay();
+    }, 1500);
+
+    fetch('/api/config')
+        .then(res => res.json())
+        .then(config => {
+            const hasFirebaseConfig = config && config.apiKey && config.projectId;
+            if (hasFirebaseConfig) {
+                const { auth } = initializeFirebase(config);
+                state.auth.mode = 'firebase';
+                console.log("NITS Academic Insight: Initialized in Firebase Auth Mode.");
+                onAuthStateChanged(auth, user => {
+                    clearTimeout(overlayTimeout);
+                    handleAuthState(user);
+                    hideLoadingOverlay();
+                });
+            } else {
+                clearTimeout(overlayTimeout);
+                initMockAuth();
+            }
+        })
+        .catch(err => {
+            console.warn("Failed to fetch Firebase config, defaulting to Mock Auth Mode:", err);
+            clearTimeout(overlayTimeout);
+            initMockAuth();
+        });
+
+    setupAuthUIEvents();
+}
+
+function initMockAuth() {
+    state.auth.mode = 'mock';
+    console.log("NITS Academic Insight: Running in Mock Auth Mode.");
+    
+    // Default to logged-out state so real users can log in on the login screen
+    const savedUser = localStorage.getItem('nits_mock_user');
+    if (savedUser) {
+        try {
+            handleAuthState(JSON.parse(savedUser));
+        } catch (e) {
+            handleAuthState(null);
+        }
+    } else {
+        handleAuthState(null);
+    }
+    
+    hideLoadingOverlay();
+}
+
+function hideLoadingOverlay() {
+    const overlay = document.getElementById('auth-loading-overlay');
+    if (overlay) {
+        overlay.style.opacity = '0';
+        overlay.style.display = 'none';
+    }
+}
+
+function handleAuthState(user) {
+    state.auth.loading = false;
+    state.auth.user = user;
+    
+    const isLoggedIn = !!user;
+    
+    if (isLoggedIn) {
+        if (dom.authContainer) dom.authContainer.style.display = 'none';
+        if (dom.appContainer) dom.appContainer.style.display = 'block';
+        
+        const nav = document.querySelector('.site-nav');
+        if (nav) nav.style.display = ''; // Let CSS media queries control nav visibility
+        if (dom.resetBtn) dom.resetBtn.style.display = 'inline-flex';
+        if (dom.mobLogoutBtn) dom.mobLogoutBtn.style.display = 'block';
+        
+        const displayName = user.displayName || user.name || user.email.split('@')[0];
+        if (dom.mobileUserInfo) {
+            dom.mobileUserInfo.textContent = `Logged in as: ${displayName}`;
+            dom.mobileUserInfo.style.display = 'block';
+        }
+
+        // Update Desktop Header Profile Display
+        const profileWrapper = document.getElementById('profile-wrapper');
+        if (profileWrapper) {
+            profileWrapper.style.display = 'block';
+        }
+        const initial = displayName.charAt(0).toUpperCase() || 'U';
+        const avatarEl = document.getElementById('profile-avatar');
+        const dropdownAvatarEl = document.getElementById('profile-dropdown-avatar');
+        const nameEl = document.getElementById('profile-name');
+        const dropdownNameEl = document.getElementById('profile-dropdown-name');
+        const dropdownEmailEl = document.getElementById('profile-dropdown-email');
+        
+        if (avatarEl) avatarEl.textContent = initial;
+        if (dropdownAvatarEl) dropdownAvatarEl.textContent = initial;
+        if (nameEl) nameEl.textContent = displayName;
+        if (dropdownNameEl) dropdownNameEl.textContent = displayName;
+        if (dropdownEmailEl) dropdownEmailEl.textContent = user.email || '';
+        
+        loadUserDataFromStorage(user.uid);
+        calculateAndRefresh();
+        loadHistoryFromDb();
+    } else {
+        if (dom.appContainer) dom.appContainer.style.display = 'none';
+        if (dom.authContainer) dom.authContainer.style.display = 'block';
+        
+        const nav = document.querySelector('.site-nav');
+        if (nav) nav.style.display = 'none';
+        if (dom.resetBtn) dom.resetBtn.style.display = 'none';
+        if (dom.mobLogoutBtn) dom.mobLogoutBtn.style.display = 'none';
+        
+        const hamburger = document.getElementById('hamburger-menu-btn');
+        if (hamburger) hamburger.classList.remove('open');
+        
+        const mobileMenu = document.getElementById('mobile-drawer-menu');
+        if (mobileMenu) mobileMenu.classList.remove('open');
+        
+        if (dom.mobileUserInfo) dom.mobileUserInfo.style.display = 'none';
+
+        // Hide Desktop Header Profile Display
+        const profileWrapper = document.getElementById('profile-wrapper');
+        if (profileWrapper) {
+            profileWrapper.style.display = 'none';
+        }
+        const profileDropdown = document.getElementById('profile-dropdown');
+        const profileTrigger = document.getElementById('profile-trigger');
+        if (profileDropdown) profileDropdown.classList.remove('show');
+        if (profileTrigger) profileTrigger.classList.remove('active');
+        
+        showAuthView('login');
+    }
+}
+
+function loadUserDataFromStorage(uid) {
+    const savedData = localStorage.getItem(`nits_semesters_${uid}`);
+    if (savedData) {
+        try {
+            const parsed = JSON.parse(savedData);
+            state.semesters = parsed.semesters || state.semesters;
+            state.selectedSemesters = parsed.selectedSemesters || state.selectedSemesters;
+            state.isNonStandardPath = parsed.isNonStandardPath || false;
+            state.periods = parsed.periods || state.periods;
+            state.projectTimeline = parsed.projectTimeline || [];
+        } catch (e) {
+            console.error("Failed to load user academic data from browser storage:", e);
+        }
+    } else {
+        // Fallback: Reset to standard empty calculator state if brand new user
+        state.semesters = { sem1: [], sem2: [], sem3: [], sem4: [] };
+        state.selectedSemesters = { sem1: false, sem2: false, sem3: false, sem4: false };
+        state.isNonStandardPath = false;
+        state.periods = [
+            { id: 'sem1', name: 'Semester 1', type: 'Semester', session: '', status: 'Completed', notes: '', isStandard: true },
+            { id: 'sem2', name: 'Semester 2', type: 'Semester', session: '', status: 'Completed', notes: '', isStandard: true },
+            { id: 'sem3', name: 'Semester 3', type: 'Semester', session: '', status: 'Completed', notes: '', isStandard: true },
+            { id: 'sem4', name: 'Semester 4', type: 'Semester', session: '', status: 'Completed', notes: '', isStandard: true }
+        ];
+        state.projectTimeline = [];
+    }
+
+    if (state.auth.mode === 'firebase') {
+        const db = getFirebaseDb();
+        if (db) {
+            getDoc(doc(db, "users", uid, "academicData", "calculatorState"))
+                .then(docSnap => {
+                    if (docSnap.exists()) {
+                        const parsed = docSnap.data();
+                        state.semesters = parsed.semesters || state.semesters;
+                        state.selectedSemesters = parsed.selectedSemesters || state.selectedSemesters;
+                        state.isNonStandardPath = parsed.isNonStandardPath || false;
+                        state.periods = parsed.periods || state.periods;
+                        state.projectTimeline = parsed.projectTimeline || [];
+                        localStorage.setItem(`nits_semesters_${uid}`, JSON.stringify(parsed));
+                        calculateAndRefresh();
+                        render();
+                    }
+                })
+                .catch(err => console.error("Firestore sync error loading data:", err));
+        }
+    }
+}
+
+function saveUserDataToStorage() {
+    const uid = state.auth.user ? state.auth.user.uid : null;
+    if (!uid) return;
+    
+    const payload = {
+        semesters: state.semesters,
+        selectedSemesters: state.selectedSemesters,
+        isNonStandardPath: state.isNonStandardPath,
+        periods: state.periods,
+        projectTimeline: state.projectTimeline
+    };
+    
+    localStorage.setItem(`nits_semesters_${uid}`, JSON.stringify(payload));
+    
+    if (state.auth.mode === 'firebase') {
+        const db = getFirebaseDb();
+        if (db) {
+            setDoc(doc(db, "users", uid, "academicData", "calculatorState"), payload)
+                .catch(err => console.error("Firestore sync error saving data:", err));
+        }
+    }
+}
+
+function showAuthView(view) {
+    if (dom.loginView) dom.loginView.style.display = view === 'login' ? 'block' : 'none';
+    if (dom.signupView) dom.signupView.style.display = view === 'signup' ? 'block' : 'none';
+    if (dom.forgotView) dom.forgotView.style.display = view === 'forgot' ? 'block' : 'none';
+}
+
+function setupAuthUIEvents() {
+    // View toggles
+    const toSignupBtn = document.getElementById('to-signup-btn');
+    const toLoginBtn = document.getElementById('to-login-btn');
+    const toForgotBtn = document.getElementById('to-forgot-btn');
+    const forgotToLoginBtn = document.getElementById('forgot-to-login-btn');
+
+    if (toSignupBtn) toSignupBtn.addEventListener('click', e => { e.preventDefault(); showAuthView('signup'); });
+    if (toLoginBtn) toLoginBtn.addEventListener('click', e => { e.preventDefault(); showAuthView('login'); });
+    if (toForgotBtn) toForgotBtn.addEventListener('click', e => { e.preventDefault(); showAuthView('forgot'); });
+    if (forgotToLoginBtn) forgotToLoginBtn.addEventListener('click', e => { e.preventDefault(); showAuthView('login'); });
+
+    // Password toggles
+    document.querySelectorAll('.btn-toggle-pwd').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const wrapper = btn.closest('.password-input-wrapper');
+            if (!wrapper) return;
+            const input = wrapper.querySelector('input[type="password"], input[type="text"]');
+            if (!input) return;
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.textContent = 'Hide';
+            } else {
+                input.type = 'password';
+                btn.textContent = 'Show';
+            }
+        });
+    });
+
+    // Login form
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        loginForm.addEventListener('submit', e => {
+            e.preventDefault();
+            handleLogin();
+        });
+    }
+
+    // Signup form
+    const signupForm = document.getElementById('signup-form');
+    if (signupForm) {
+        signupForm.addEventListener('submit', e => {
+            e.preventDefault();
+            handleSignup();
+        });
+    }
+
+    // Forgot password form
+    const forgotForm = document.getElementById('forgot-form');
+    if (forgotForm) {
+        forgotForm.addEventListener('submit', e => {
+            e.preventDefault();
+            handleForgotReset();
+        });
+    }
+
+    // Google auth buttons
+    const loginGoogleBtn = document.getElementById('login-google-btn');
+    const signupGoogleBtn = document.getElementById('signup-google-btn');
+    if (loginGoogleBtn) loginGoogleBtn.addEventListener('click', handleGoogleLogin);
+    if (signupGoogleBtn) signupGoogleBtn.addEventListener('click', handleGoogleLogin);
+
+    // Logout buttons
+    const pdLogoutBtn = document.getElementById('pd-logout-btn');
+    if (pdLogoutBtn) pdLogoutBtn.addEventListener('click', e => { e.preventDefault(); handleLogout(); });
+    if (dom.mobLogoutBtn) dom.mobLogoutBtn.addEventListener('click', e => { e.preventDefault(); handleLogout(); });
+
+    // Desktop Profile Dropdown Toggle Logic
+    const profileTrigger = document.getElementById('profile-trigger');
+    const profileDropdown = document.getElementById('profile-dropdown');
+
+    if (profileTrigger && profileDropdown) {
+        profileTrigger.addEventListener('click', e => {
+            e.stopPropagation();
+            const showDropdown = !profileDropdown.classList.contains('show');
+            if (showDropdown) {
+                profileDropdown.classList.add('show');
+                profileTrigger.classList.add('active');
+            } else {
+                profileDropdown.classList.remove('show');
+                profileTrigger.classList.remove('active');
+            }
+        });
+
+        // Close dropdown when clicking dropdown items
+        profileDropdown.querySelectorAll('.profile-dropdown-item').forEach(item => {
+            item.addEventListener('click', () => {
+                profileDropdown.classList.remove('show');
+                profileTrigger.classList.remove('active');
+            });
+        });
+
+        // Close dropdown on click outside
+        document.addEventListener('click', e => {
+            if (!e.target.closest('#profile-wrapper')) {
+                profileDropdown.classList.remove('show');
+                profileTrigger.classList.remove('active');
+            }
+        });
+
+        // Close dropdown on Escape key
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                profileDropdown.classList.remove('show');
+                profileTrigger.classList.remove('active');
+            }
+        });
+    }
+
+    // Wire dropdown logout button to logout handler
+    const pdLogoutBtn = document.getElementById('pd-logout-btn');
+    if (pdLogoutBtn) {
+        pdLogoutBtn.addEventListener('click', e => {
+            e.preventDefault();
+            handleLogout();
+        });
+    }
+}
+
+function validateEmailFormat(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function showInlineError(id, msg) {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = msg; el.style.display = 'block'; }
+}
+
+function hideInlineError(id) {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = ''; el.style.display = 'none'; }
+}
+
+function toggleButtonLoading(btnId, isLoading) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    const textEl = btn.querySelector('.btn-text');
+    const spinnerEl = btn.querySelector('.btn-spinner');
+    btn.disabled = isLoading;
+    if (textEl) textEl.style.display = isLoading ? 'none' : 'inline';
+    if (spinnerEl) spinnerEl.style.display = isLoading ? 'inline-block' : 'none';
+}
+
+function handleLogin() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const remember = document.getElementById('login-remember')?.checked ?? true;
+
+    hideInlineError('login-email-error');
+    hideInlineError('login-password-error');
+
+    let valid = true;
+    if (!email) { showInlineError('login-email-error', 'Email is required.'); valid = false; }
+    else if (!validateEmailFormat(email)) { showInlineError('login-email-error', 'Please enter a valid email address.'); valid = false; }
+    if (!password) { showInlineError('login-password-error', 'Password is required.'); valid = false; }
+    if (!valid) return;
+
+    toggleButtonLoading('login-submit-btn', true);
+
+    window.AuthService.login(email, password, remember)
+        .then(() => {
+            showToast("Welcome back!", "success");
+        })
+        .catch(err => {
+            console.error("Login failed:", err);
+            const friendlyMsg = getAuthErrorMessage(err);
+            showInlineError('login-email-error', friendlyMsg);
+        })
+        .finally(() => {
+            toggleButtonLoading('login-submit-btn', false);
+        });
+}
+
+function handleSignup() {
+    const name = document.getElementById('signup-name').value.trim();
+    const email = document.getElementById('signup-email').value.trim();
+    const password = document.getElementById('signup-password').value;
+    const confirmPassword = document.getElementById('signup-confirm-password').value;
+    const terms = document.getElementById('signup-terms')?.checked;
+
+    hideInlineError('signup-name-error');
+    hideInlineError('signup-email-error');
+    hideInlineError('signup-password-error');
+    hideInlineError('signup-confirm-password-error');
+    hideInlineError('signup-terms-error');
+
+    let valid = true;
+    if (!name) { showInlineError('signup-name-error', 'Full name is required.'); valid = false; }
+    if (!email) { showInlineError('signup-email-error', 'Email is required.'); valid = false; }
+    else if (!validateEmailFormat(email)) { showInlineError('signup-email-error', 'Please enter a valid email address.'); valid = false; }
+    if (!password) { showInlineError('signup-password-error', 'Password is required.'); valid = false; }
+    else if (password.length < 8) { showInlineError('signup-password-error', 'Password must be at least 8 characters.'); valid = false; }
+    if (password !== confirmPassword) { showInlineError('signup-confirm-password-error', 'Passwords do not match.'); valid = false; }
+    if (!terms) { showInlineError('signup-terms-error', 'You must accept the terms and conditions.'); valid = false; }
+    if (!valid) return;
+
+    toggleButtonLoading('signup-submit-btn', true);
+
+    window.AuthService.signup(name, email, password)
+        .then(() => {
+            showToast("Account created successfully! Welcome.", "success");
+        })
+        .catch(err => {
+            console.error("Signup failed:", err);
+            const friendlyMsg = getAuthErrorMessage(err);
+            showInlineError('signup-email-error', friendlyMsg);
+        })
+        .finally(() => {
+            toggleButtonLoading('signup-submit-btn', false);
+        });
+}
+
+function handleForgotReset() {
+    const email = document.getElementById('forgot-email').value.trim();
+    hideInlineError('forgot-email-error');
+
+    if (!email) {
+        showInlineError('forgot-email-error', 'Email is required.');
+        return;
+    } else if (!validateEmailFormat(email)) {
+        showInlineError('forgot-email-error', 'Please enter a valid email address.');
+        return;
+    }
+
+    toggleButtonLoading('forgot-submit-btn', true);
+
+    window.AuthService.resetPassword(email)
+        .then(() => {
+            showToast("Password reset email sent successfully!", "success");
+            showAuthView('login');
+        })
+        .catch(err => {
+            console.error("Password reset failed:", err);
+            const friendlyMsg = getAuthErrorMessage(err);
+            showInlineError('forgot-email-error', friendlyMsg);
+        })
+        .finally(() => {
+            toggleButtonLoading('forgot-submit-btn', false);
+        });
+}
+
+function handleGoogleLogin() {
+    const activeBtnId = dom.loginView && dom.loginView.style.display !== 'none' ? 'login-google-btn' : 'signup-google-btn';
+    toggleButtonLoading(activeBtnId, true);
+
+    window.AuthService.loginWithGoogle()
+        .then(() => {
+            showToast("Successfully authenticated via Google!", "success");
+        })
+        .catch(err => {
+            console.error("Google authentication failed:", err);
+            showToast(getAuthErrorMessage(err), "error");
+        })
+        .finally(() => {
+            toggleButtonLoading(activeBtnId, false);
+        });
+}
+
+function handleLogout() {
+    showConfirmModal("Are you sure you want to sign out?", () => {
+        localStorage.removeItem('nits_mock_user');
+        sessionStorage.removeItem('nits_mock_user');
+        window.AuthService.logout()
+            .then(() => {
+                showToast("Successfully signed out.", "success");
+                handleAuthState(null);
+            })
+            .catch(err => {
+                console.error("Logout failed:", err);
+                handleAuthState(null);
+            });
+    });
+}
+
+// ====================================================
+// PART 8: ACADEMIC HISTORY & REPORT SYSTEM
+// ====================================================
+let stateHistory = [];
+let editingHistoryRecord = null;
+let viewingHistoryRecord = null;
+
+// Initialize history controls & event listeners
+window.initHistorySystem = function() {
+    if (!dom.saveCurrentHistoryBtn) return; // Prevent double registration
+
+    // Save calculator snapshot triggers
+    dom.saveCurrentHistoryBtn.addEventListener('click', () => {
+        const activeUser = state.auth.user;
+        dom.saveHistoryNameInput.value = activeUser ? (activeUser.displayName || '') : '';
+        dom.saveHistoryRollInput.value = '';
+        dom.saveHistoryNicknameInput.value = '';
+        dom.saveHistorySourceType.value = 'own';
+        dom.saveHistoryModal.style.display = 'flex';
+    });
+    
+    dom.closeSaveHistoryModalBtn.addEventListener('click', () => {
+        dom.saveHistoryModal.style.display = 'none';
+    });
+    dom.btnCancelSaveHistoryModal.addEventListener('click', () => {
+        dom.saveHistoryModal.style.display = 'none';
+    });
+    
+    dom.btnConfirmSaveHistoryModal.addEventListener('click', () => {
+        const nickname = dom.saveHistoryNicknameInput.value;
+        const name = dom.saveHistoryNameInput.value;
+        const roll = dom.saveHistoryRollInput.value;
+        const sourceType = dom.saveHistorySourceType.value;
+        
+        if (!name.trim()) {
+            showToast("Please enter the student name.", "warning");
+            return;
+        }
+        if (!roll.trim()) {
+            showToast("Please enter the Roll Number / Student ID.", "warning");
+            return;
+        }
+        
+        saveHistoryRecord(nickname, name, roll, sourceType);
+    });
+    
+    // Search history inputs
+    dom.historySearchInput.addEventListener('input', () => {
+        renderHistoryList();
+    });
+    dom.historyFilterType.addEventListener('change', () => {
+        renderHistoryList();
+    });
+    dom.historySort.addEventListener('change', () => {
+        renderHistoryList();
+    });
+    
+    // Start calculating empty state button
+    dom.historyStartCalcBtn.addEventListener('click', () => {
+        const calcLink = document.getElementById('nav-calc-btn');
+        if (calcLink) calcLink.click();
+    });
+    
+    // Lookup Student ID
+    dom.btnLookupStudent.addEventListener('click', async () => {
+        const studentId = dom.lookupStudentId.value.trim();
+        if (!studentId) {
+            showToast("Please enter a Student ID.", "warning");
+            return;
+        }
+        
+        toggleButtonLoading('btn-lookup-student', true);
+        try {
+            if (state.auth.mode === 'firebase') {
+                const db = getFirebaseDb();
+                if (db) {
+                    const docSnap = await getDoc(doc(db, "publicProfiles", studentId));
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        
+                        // Map private nickname if it exists
+                        const uid = state.auth.user.uid;
+                        const nickSnap = await getDoc(doc(db, "users", uid, "nicknames", studentId));
+                        const privateNickname = nickSnap.exists() ? nickSnap.data().nickname : '';
+                        
+                        const record = {
+                            id: studentId,
+                            studentId: data.studentId,
+                            studentName: data.studentName,
+                            semesters: data.semesters,
+                            summary: data.summary,
+                            nickname: privateNickname,
+                            isPublicLookup: true,
+                            sourceType: 'viewed',
+                            version: 1
+                        };
+                        openHistoryDetail(record);
+                        showToast(`Retrieved record for Roll Number: ${studentId}`, "success");
+                    } else {
+                        showToast(`No public academic record found for Student ID: ${studentId}`, "warning");
+                    }
+                }
+            } else {
+                // Mock lookup
+                const publicProfiles = JSON.parse(localStorage.getItem('nits_mock_public_profiles') || '{}');
+                if (publicProfiles[studentId]) {
+                    const data = publicProfiles[studentId];
+                    const mockNicks = JSON.parse(localStorage.getItem(`nits_mock_nicknames_${state.auth.user.uid}`) || '{}');
+                    const privateNickname = mockNicks[studentId] || '';
+                    
+                    const record = {
+                        id: studentId,
+                        studentId: data.studentId,
+                        studentName: data.studentName,
+                        semesters: data.semesters,
+                        summary: data.summary,
+                        nickname: privateNickname,
+                        isPublicLookup: true,
+                        sourceType: 'viewed',
+                        version: 1
+                    };
+                    openHistoryDetail(record);
+                    showToast(`Mock lookup: retrieved record for ${studentId}`, "success");
+                } else {
+                    showToast(`No public academic record found for Student ID: ${studentId}`, "warning");
+                }
+            }
+        } catch (err) {
+            console.error("Lookup error:", err);
+            showToast("Lookup failed: " + err.message, "error");
+        } finally {
+            toggleButtonLoading('btn-lookup-student', false);
+        }
+    });
+    
+    // Details Modal
+    dom.closeHistDetailBtn.addEventListener('click', () => {
+        dom.historyDetailModal.style.display = 'none';
+    });
+    dom.btnHistDetailClose.addEventListener('click', () => {
+        dom.historyDetailModal.style.display = 'none';
+    });
+    dom.btnHistDetailPdf.addEventListener('click', () => {
+        if (viewingHistoryRecord) {
+            downloadReportPDF(viewingHistoryRecord);
+            showToast("PDF report downloaded successfully.", "success");
+        }
+    });
+    dom.btnHistDetailCsv.addEventListener('click', () => {
+        if (viewingHistoryRecord) {
+            downloadReportCSV(viewingHistoryRecord);
+        }
+    });
+    
+    // Edit Modal
+    dom.closeHistoryEditBtn.addEventListener('click', () => {
+        dom.historyEditModal.style.display = 'none';
+    });
+    dom.btnCancelEditHistory.addEventListener('click', () => {
+        dom.historyEditModal.style.display = 'none';
+    });
+    
+    dom.btnSaveChangesHistory.addEventListener('click', () => {
+        if (editingHistoryRecord) {
+            const nickname = dom.editHistNicknameInput.value;
+            const name = dom.editHistNameInput.value;
+            const roll = dom.editHistRollInput.value;
+            
+            if (!name.trim()) {
+                showToast("Please enter the student name.", "warning");
+                return;
+            }
+            if (!roll.trim()) {
+                showToast("Please enter the Roll Number / Student ID.", "warning");
+                return;
+            }
+            
+            updateHistoryRecord(editingHistoryRecord.id, nickname, name, roll, editingHistoryRecord.semesters, false);
+        }
+    });
+    
+    dom.btnSaveAsNewHistory.addEventListener('click', () => {
+        if (editingHistoryRecord) {
+            const nickname = dom.editHistNicknameInput.value;
+            const name = dom.editHistNameInput.value;
+            const roll = dom.editHistRollInput.value;
+            
+            if (!name.trim()) {
+                showToast("Please enter the student name.", "warning");
+                return;
+            }
+            if (!roll.trim()) {
+                showToast("Please enter the Roll Number / Student ID.", "warning");
+                return;
+            }
+            
+            updateHistoryRecord(editingHistoryRecord.id, nickname, name, roll, editingHistoryRecord.semesters, true);
+        }
+    });
+};
+
+// Fetch user history documents from database
+window.loadHistoryFromDb = async function() {
+    const uid = state.auth.user ? state.auth.user.uid : null;
+    if (!uid) {
+        stateHistory = [];
+        renderHistoryList();
+        return;
+    }
+    
+    if (state.auth.mode === 'firebase') {
+        const db = getFirebaseDb();
+        if (db) {
+            try {
+                // Fetch nicknames first
+                const nickSnap = await getDocs(collection(db, "users", uid, "nicknames"));
+                const nickMap = {};
+                nickSnap.forEach(d => {
+                    nickMap[d.id] = d.data().nickname;
+                });
+                
+                // Fetch history records
+                const q = query(collection(db, "users", uid, "history"), orderBy("createdAt", "desc"));
+                const historySnap = await getDocs(q);
+                const items = [];
+                historySnap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    items.push({
+                        id: docSnap.id,
+                        ...data,
+                        nickname: nickMap[data.studentId] || data.nickname || ''
+                    });
+                });
+                stateHistory = items;
+                renderHistoryList();
+            } catch (err) {
+                console.error("Error loading history from Firestore:", err);
+            }
+        }
+    } else {
+        // Mock Mode
+        const mockHist = localStorage.getItem(`nits_mock_history_${uid}`);
+        stateHistory = mockHist ? JSON.parse(mockHist) : [];
+        renderHistoryList();
+    }
+};
+
+// Save a brand new history snapshot to DB
+async function saveHistoryRecord(nickname, name, roll, sourceType, semestersOverride = null) {
+    const uid = state.auth.user ? state.auth.user.uid : null;
+    if (!uid) {
+        showToast("Please login to save records.", "error");
+        return;
+    }
+    
+    const semestersSnapshot = semestersOverride || JSON.parse(JSON.stringify(state.semesters));
+    
+    // Temporarily replace semesters to calculate metrics
+    const originalSemesters = state.semesters;
+    state.semesters = semestersSnapshot;
+    const overall = calculateCombined(['sem1', 'sem2', 'sem3', 'sem4']);
+    state.semesters = originalSemesters; 
+    
+    const record = {
+        ownerUid: uid,
+        ownerEmail: state.auth.user.email || '',
+        ownerDisplayName: state.auth.user.displayName || '',
+        nickname: nickname.trim(),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        recordType: "snapshot",
+        sourceType: sourceType, 
+        studentId: roll.trim(),
+        studentName: name.trim(),
+        semesters: semestersSnapshot,
+        summary: {
+            overallCGPA: overall.cgpa,
+            percentage: overall.percentage,
+            totalCredits: overall.totalCredits,
+            activeBacklogs: overall.backlogs
+        },
+        calculationMethod: state.calculationMethod,
+        version: 1
+    };
+
+    if (sourceType === 'viewed') {
+        record.viewedStudentId = roll.trim();
+        record.viewedStudentName = name.trim();
+        record.viewerUid = uid;
+    }
+
+    try {
+        if (state.auth.mode === 'firebase') {
+            const db = getFirebaseDb();
+            if (db) {
+                // 1. Save Nickname
+                if (nickname.trim()) {
+                    await setDoc(doc(db, "users", uid, "nicknames", roll.trim()), {
+                        nickname: nickname.trim(),
+                        updatedAt: serverTimestamp()
+                    });
+                }
+                
+                // 2. Save Snapshot History
+                await addDoc(collection(db, "users", uid, "history"), {
+                    ...record,
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                });
+                
+                // 3. Save snapshot to public profiles directory if sourceType is 'own'
+                if (sourceType === 'own') {
+                    await setDoc(doc(db, "publicProfiles", roll.trim()), {
+                        studentId: roll.trim(),
+                        studentName: name.trim(),
+                        semesters: semestersSnapshot,
+                        summary: record.summary,
+                        ownerUid: uid,
+                        createdAt: serverTimestamp(),
+                        updatedAt: serverTimestamp()
+                    });
+                }
+                showToast("Snapshot saved to history successfully.", "success");
+            }
+        } else {
+            // Mock Mode
+            if (nickname.trim()) {
+                const mockNicks = JSON.parse(localStorage.getItem(`nits_mock_nicknames_${uid}`) || '{}');
+                mockNicks[roll.trim()] = nickname.trim();
+                localStorage.setItem(`nits_mock_nicknames_${uid}`, JSON.stringify(mockNicks));
+            }
+            
+            const mockHist = JSON.parse(localStorage.getItem(`nits_mock_history_${uid}`) || '[]');
+            record.id = 'hist_' + Date.now();
+            mockHist.unshift(record);
+            localStorage.setItem(`nits_mock_history_${uid}`, JSON.stringify(mockHist));
+            
+            if (sourceType === 'own') {
+                const publicProfiles = JSON.parse(localStorage.getItem('nits_mock_public_profiles') || '{}');
+                publicProfiles[roll.trim()] = {
+                    studentId: roll.trim(),
+                    studentName: name.trim(),
+                    semesters: semestersSnapshot,
+                    summary: record.summary,
+                    ownerUid: uid
+                };
+                localStorage.setItem('nits_mock_public_profiles', JSON.stringify(publicProfiles));
+            }
+            showToast("Snapshot saved to mock history successfully.", "success");
+        }
+        
+        dom.saveHistoryModal.style.display = 'none';
+        await loadHistoryFromDb();
+    } catch (err) {
+        console.error("Error saving history snapshot:", err);
+        showToast("Error saving snapshot: " + err.message, "error");
+    }
+}
+
+// Update / Save as New history snapshots
+async function updateHistoryRecord(recordId, nickname, name, roll, semestersSnapshot, saveAsNew = false) {
+    const uid = state.auth.user ? state.auth.user.uid : null;
+    if (!uid) return;
+    
+    // Recalculate metrics
+    const originalSemesters = state.semesters;
+    state.semesters = semestersSnapshot;
+    const overall = calculateCombined(['sem1', 'sem2', 'sem3', 'sem4']);
+    state.semesters = originalSemesters;
+    
+    const existingRecord = stateHistory.find(r => r.id === recordId);
+    if (!existingRecord && !saveAsNew) {
+        showToast("Original snapshot not found.", "error");
+        return;
+    }
+    
+    const newVersion = saveAsNew ? 1 : ((existingRecord.version || 1) + 1);
+    
+    const record = {
+        ownerUid: uid,
+        ownerEmail: state.auth.user.email || '',
+        ownerDisplayName: state.auth.user.displayName || '',
+        nickname: nickname.trim(),
+        updatedAt: Date.now(),
+        studentId: roll.trim(),
+        studentName: name.trim(),
+        semesters: semestersSnapshot,
+        summary: {
+            overallCGPA: overall.cgpa,
+            percentage: overall.percentage,
+            totalCredits: overall.totalCredits,
+            activeBacklogs: overall.backlogs
+        },
+        calculationMethod: state.calculationMethod,
+        version: newVersion
+    };
+    
+    if (saveAsNew) {
+        record.createdAt = Date.now();
+        record.sourceType = existingRecord ? existingRecord.sourceType : 'own';
+    } else {
+        record.createdAt = existingRecord.createdAt || Date.now();
+        record.sourceType = existingRecord.sourceType || 'own';
+    }
+    
+    if (record.sourceType === 'viewed') {
+        record.viewedStudentId = roll.trim();
+        record.viewedStudentName = name.trim();
+        record.viewerUid = uid;
+    }
+    
+    try {
+        if (state.auth.mode === 'firebase') {
+            const db = getFirebaseDb();
+            if (db) {
+                // 1. Private Nickname Update
+                if (nickname.trim()) {
+                    await setDoc(doc(db, "users", uid, "nicknames", roll.trim()), {
+                        nickname: nickname.trim(),
+                        updatedAt: serverTimestamp()
+                    });
+                } else {
+                    // Remove nickname if cleared
+                    await deleteDoc(doc(db, "users", uid, "nicknames", roll.trim()));
+                }
+                
+                // 2. History Document Update
+                if (saveAsNew) {
+                    await addDoc(collection(db, "users", uid, "history"), {
+                        ...record,
+                        createdAt: serverTimestamp(),
+                        updatedAt: serverTimestamp()
+                    });
+                    showToast("Snapshot saved as new history record.", "success");
+                } else {
+                    await setDoc(doc(db, "users", uid, "history", recordId), {
+                        ...record,
+                        updatedAt: serverTimestamp()
+                    });
+                    showToast("History record updated successfully.", "success");
+                }
+                
+                // 3. Public profile copy updates if own record
+                if (record.sourceType === 'own') {
+                    await setDoc(doc(db, "publicProfiles", roll.trim()), {
+                        studentId: roll.trim(),
+                        studentName: name.trim(),
+                        semesters: semestersSnapshot,
+                        summary: record.summary,
+                        ownerUid: uid,
+                        updatedAt: serverTimestamp()
+                    });
+                }
+            }
+        } else {
+            // Mock Mode
+            if (nickname.trim()) {
+                const mockNicks = JSON.parse(localStorage.getItem(`nits_mock_nicknames_${uid}`) || '{}');
+                mockNicks[roll.trim()] = nickname.trim();
+                localStorage.setItem(`nits_mock_nicknames_${uid}`, JSON.stringify(mockNicks));
+            }
+            
+            const mockHist = JSON.parse(localStorage.getItem(`nits_mock_history_${uid}`) || '[]');
+            if (saveAsNew) {
+                record.id = 'hist_' + Date.now();
+                mockHist.unshift(record);
+                showToast("Snapshot saved as new mock history record.", "success");
+            } else {
+                const idx = mockHist.findIndex(r => r.id === recordId);
+                if (idx !== -1) {
+                    record.id = recordId;
+                    mockHist[idx] = record;
+                    showToast("Mock history record updated successfully.", "success");
+                }
+            }
+            localStorage.setItem(`nits_mock_history_${uid}`, JSON.stringify(mockHist));
+            
+            if (record.sourceType === 'own') {
+                const publicProfiles = JSON.parse(localStorage.getItem('nits_mock_public_profiles') || '{}');
+                publicProfiles[roll.trim()] = {
+                    studentId: roll.trim(),
+                    studentName: name.trim(),
+                    semesters: semestersSnapshot,
+                    summary: record.summary,
+                    ownerUid: uid
+                };
+                localStorage.setItem('nits_mock_public_profiles', JSON.stringify(publicProfiles));
+            }
+        }
+        
+        dom.historyEditModal.style.display = 'none';
+        await loadHistoryFromDb();
+    } catch (err) {
+        console.error("Error updating history:", err);
+        showToast("Error updating history record: " + err.message, "error");
+    }
+}
+
+// Delete snapshots from user history
+async function deleteHistoryRecord(recordId) {
+    const uid = state.auth.user ? state.auth.user.uid : null;
+    if (!uid) return;
+    
+    showConfirmModal("Delete this history record? This will permanently remove this saved record from your history.", async () => {
+        try {
+            if (state.auth.mode === 'firebase') {
+                const db = getFirebaseDb();
+                if (db) {
+                    await deleteDoc(doc(db, "users", uid, "history", recordId));
+                    showToast("History record deleted.", "success");
+                }
+            } else {
+                // Mock Mode
+                const mockHist = JSON.parse(localStorage.getItem(`nits_mock_history_${uid}`) || '[]');
+                const filtered = mockHist.filter(r => r.id !== recordId);
+                localStorage.setItem(`nits_mock_history_${uid}`, JSON.stringify(filtered));
+                showToast("Mock history record deleted.", "success");
+            }
+            await loadHistoryFromDb();
+        } catch (err) {
+            console.error("Error deleting history record:", err);
+            showToast("Failed to delete record: " + err.message, "error");
+        }
+    });
+}
+
+// Render list of cards on the history tab panel
+function renderHistoryList() {
+    const container = dom.historyItemsContainer;
+    container.innerHTML = '';
+    
+    const searchQuery = dom.historySearchInput.value.toLowerCase().trim();
+    const filterType = dom.historyFilterType.value;
+    const sortVal = dom.historySort.value;
+    
+    let filtered = [...stateHistory];
+    
+    // 1. Search Query filter matching
+    if (searchQuery) {
+        filtered = filtered.filter(item => {
+            const matchesName = (item.studentName || '').toLowerCase().includes(searchQuery);
+            const matchesNick = (item.nickname || '').toLowerCase().includes(searchQuery);
+            const matchesId = (item.studentId || '').toLowerCase().includes(searchQuery);
+            
+            let matchesCourses = false;
+            if (item.semesters) {
+                Object.keys(item.semesters).forEach(semKey => {
+                    const courses = item.semesters[semKey] || [];
+                    courses.forEach(c => {
+                        if ((c.code || '').toLowerCase().includes(searchQuery) || (c.subject || '').toLowerCase().includes(searchQuery)) {
+                            matchesCourses = true;
+                        }
+                    });
+                });
+            }
+            
+            return matchesName || matchesNick || matchesId || matchesCourses;
+        });
+    }
+    
+    // 2. Filter Types
+    if (filterType === 'own') {
+        filtered = filtered.filter(item => item.sourceType === 'own');
+    } else if (filterType === 'viewed') {
+        filtered = filtered.filter(item => item.sourceType === 'viewed');
+    } else if (filterType === 'recent') {
+        const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+        filtered = filtered.filter(item => (item.updatedAt || item.createdAt) > oneDayAgo);
+    }
+    
+    // 3. Sorting options
+    if (sortVal === 'newest') {
+        filtered.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    } else if (sortVal === 'oldest') {
+        filtered.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    } else if (sortVal === 'updated') {
+        filtered.sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+    } else if (sortVal === 'name') {
+        filtered.sort((a, b) => (a.studentName || '').localeCompare(b.studentName || ''));
+    }
+    
+    if (filtered.length === 0) {
+        container.style.display = 'none';
+        dom.historyEmptyState.style.display = 'block';
+        return;
+    }
+    
+    container.style.display = 'flex';
+    dom.historyEmptyState.style.display = 'none';
+    
+    filtered.forEach(record => {
+        const div = document.createElement('div');
+        div.className = 'history-card';
+        
+        const isOwn = record.sourceType === 'own';
+        const badgeClass = isOwn ? 'badge-own' : 'badge-viewed';
+        const badgeLabel = isOwn ? 'My Data' : 'Viewed';
+        
+        const displayLabel = record.nickname ? record.nickname : (isOwn ? 'My Academic Record' : 'Viewed Student');
+        const displayNameText = record.studentName || (isOwn ? 'Subham Kumar' : '—');
+        
+        const sum = record.summary || {};
+        const cgpaStr = sum.overallCGPA !== undefined && sum.overallCGPA !== null ? sum.overallCGPA.toFixed(2) : '—';
+        const creditsStr = sum.totalCredits !== undefined && sum.totalCredits !== null ? String(sum.totalCredits) : '—';
+        const backlogsStr = sum.activeBacklogs !== undefined && sum.activeBacklogs !== null ? String(sum.activeBacklogs) : '—';
+        
+        const updatedDate = new Date(record.updatedAt || record.createdAt || Date.now()).toLocaleDateString('en-GB', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric'
+        });
+        
+        div.innerHTML = `
+            <div class="history-card-header">
+                <div>
+                    <h4 class="history-card-title">${displayLabel}</h4>
+                    <p class="history-card-subtitle">${displayNameText} | ID: ${record.studentId || '—'}</p>
+                </div>
+                <span class="history-card-badge ${badgeClass}">${badgeLabel}</span>
+            </div>
+            <div class="history-card-grid">
+                <div class="history-card-metric">CGPA: <strong>${cgpaStr}</strong></div>
+                <div class="history-card-metric">Credits: <strong>${creditsStr}</strong></div>
+                <div class="history-card-metric">Backlogs: <strong>${backlogsStr}</strong></div>
+            </div>
+            <div class="history-card-footer">
+                <span class="history-card-date">Updated: ${updatedDate} | v${record.version || 1}</span>
+                <div class="history-card-actions">
+                    <button type="button" class="history-action-btn view-hist-btn" data-id="${record.id}">View</button>
+                    <button type="button" class="history-action-btn edit-hist-btn" data-id="${record.id}">Edit</button>
+                    <button type="button" class="history-action-btn report-hist-btn" data-id="${record.id}">Report</button>
+                    <button type="button" class="history-action-btn history-action-btn-danger delete-hist-btn" data-id="${record.id}">Delete</button>
+                </div>
+            </div>
+        `;
+        
+        div.querySelector('.view-hist-btn').addEventListener('click', () => openHistoryDetail(record));
+        div.querySelector('.edit-hist-btn').addEventListener('click', () => openHistoryEdit(record));
+        div.querySelector('.report-hist-btn').addEventListener('click', () => openHistoryReport(record));
+        div.querySelector('.delete-hist-btn').addEventListener('click', () => deleteHistoryRecord(record.id));
+        
+        container.appendChild(div);
+    });
+}
+
+// Show detailed academic snapshot modal
+function openHistoryDetail(record) {
+    viewingHistoryRecord = record;
+    
+    dom.histDetailName.textContent = record.studentName || '—';
+    dom.histDetailRoll.textContent = record.studentId || '—';
+    dom.histDetailNickname.textContent = record.nickname || '—';
+    
+    const isOwn = record.sourceType === 'own';
+    dom.histDetailBadge.textContent = isOwn ? 'My Data' : 'Viewed';
+    dom.histDetailBadge.className = 'history-card-badge ' + (isOwn ? 'badge-own' : 'badge-viewed');
+    
+    const sum = record.summary || {};
+    dom.histDetailCgpa.textContent = sum.overallCGPA !== undefined && sum.overallCGPA !== null ? sum.overallCGPA.toFixed(2) : '—';
+    dom.histDetailPct.textContent = sum.percentage !== undefined && sum.percentage !== null ? `${sum.percentage.toFixed(1)}%` : '—';
+    dom.histDetailCredits.textContent = sum.totalCredits !== undefined && sum.totalCredits !== null ? String(sum.totalCredits) : '—';
+    dom.histDetailBacklogs.textContent = sum.activeBacklogs !== undefined && sum.activeBacklogs !== null ? String(sum.activeBacklogs) : '—';
+    
+    const wrapper = dom.histDetailSemestersWrapper;
+    wrapper.innerHTML = '';
+    
+    const semesters = record.semesters || {};
+    Object.keys(semesters).forEach(semKey => {
+        const courses = semesters[semKey] || [];
+        if (courses.length === 0) return;
+        
+        const semTitle = semKey.toUpperCase().replace('SEM', 'Semester ');
+        const semBlock = document.createElement('div');
+        semBlock.innerHTML = `
+            <h4 style="font-size:0.85rem; font-weight:700; margin-bottom:8px; border-bottom:1.5px solid var(--border); padding-bottom:4px; color:var(--text-main);">${semTitle}</h4>
+            <div class="table-container">
+                <table class="subjects-table" style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Subject</th>
+                            <th style="text-align:center; width:80px;">Credits</th>
+                            <th style="text-align:center; width:80px;">Grade</th>
+                            <th style="text-align:center; width:60px;">GP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${courses.map(c => `
+                            <tr>
+                                <td>${c.code || '—'}</td>
+                                <td>${c.subject || '—'}</td>
+                                <td style="text-align:center;">${c.credits !== null ? c.credits : '—'}</td>
+                                <td style="text-align:center;"><span class="badge ${c.grade === 'F' ? 'badge-f' : 'badge-aa'}">${c.grade || '—'}</span></td>
+                                <td style="text-align:center;">${GRADE_POINT_MAPPING[c.grade] !== undefined ? GRADE_POINT_MAPPING[c.grade] : '—'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        wrapper.appendChild(semBlock);
+    });
+    
+    dom.histDetailVersionInfo.textContent = `Version ${record.version || 1} | Last Modified: ${new Date(record.updatedAt || record.createdAt || Date.now()).toLocaleDateString('en-GB')}`;
+    
+    const savePublicBtn = document.getElementById('btn-hist-detail-save-public');
+    if (savePublicBtn) savePublicBtn.remove();
+    
+    if (record.isPublicLookup) {
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'btn btn-outline-primary btn-sm';
+        saveBtn.id = 'btn-hist-detail-save-public';
+        saveBtn.textContent = 'Save to My History';
+        saveBtn.addEventListener('click', () => {
+            dom.historyDetailModal.style.display = 'none';
+            dom.saveHistoryNameInput.value = record.studentName;
+            dom.saveHistoryRollInput.value = record.studentId;
+            dom.saveHistoryNicknameInput.value = '';
+            dom.saveHistorySourceType.value = 'viewed';
+            dom.saveHistoryModal.style.display = 'flex';
+        });
+        dom.btnHistDetailPdf.parentNode.insertBefore(saveBtn, dom.btnHistDetailCsv);
+    }
+    
+    dom.historyDetailModal.style.display = 'flex';
+}
+
+// Show editing panel for history records
+function openHistoryEdit(record) {
+    editingHistoryRecord = JSON.parse(JSON.stringify(record));
+    
+    dom.editHistNameInput.value = record.studentName || '';
+    dom.editHistRollInput.value = record.studentId || '';
+    dom.editHistNicknameInput.value = record.nickname || '';
+    dom.editHistVersionDisplay.textContent = `Version ${record.version || 1}`;
+    
+    renderEditHistoryCourses(editingHistoryRecord.semesters);
+    dom.historyEditModal.style.display = 'flex';
+}
+
+// Generate semesters course rows editor inside edit modal
+function renderEditHistoryCourses(semesters) {
+    const container = dom.editHistCoursesEditor;
+    container.innerHTML = '';
+    
+    Object.keys(semesters).forEach(semKey => {
+        const courses = semesters[semKey] || [];
+        const semTitle = semKey.toUpperCase().replace('SEM', 'Semester ');
+        
+        const semBlock = document.createElement('div');
+        semBlock.style.marginBottom = '16px';
+        semBlock.innerHTML = `
+            <h4 style="font-size:0.85rem; font-weight:700; margin-bottom:8px; border-bottom:1.5px solid var(--primary); padding-bottom:4px; color:var(--primary);">${semTitle}</h4>
+            <div class="table-container">
+                <table class="subjects-table">
+                    <thead>
+                        <tr>
+                            <th>Course</th>
+                            <th>Subject</th>
+                            <th style="width: 70px;">Credits</th>
+                            <th style="width: 100px;">Grade</th>
+                            <th style="width: 50px;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="edit-hist-tbody-${semKey}"></tbody>
+                </table>
+            </div>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="btn-edit-hist-add-${semKey}" style="margin-top:8px;">+ Add Course</button>
+        `;
+        container.appendChild(semBlock);
+        
+        const tbody = document.getElementById(`edit-hist-tbody-${semKey}`);
+        
+        function renderRows() {
+            tbody.innerHTML = '';
+            courses.forEach((course, idx) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><input type="text" class="input-code edit-c-code" data-idx="${idx}" placeholder="Code" value="${course.code || ''}"></td>
+                    <td><input type="text" class="input-subject edit-c-subject" data-idx="${idx}" placeholder="Subject" value="${course.subject || ''}"></td>
+                    <td><input type="number" step="any" class="input-credits edit-c-credits" data-idx="${idx}" placeholder="Cr" value="${course.credits === null ? '' : course.credits}"></td>
+                    <td>
+                        <select class="select-grade edit-c-grade" data-idx="${idx}" style="min-height:32px; padding:2px 4px;">
+                            <option value="">Grade</option>
+                            ${Object.keys(GRADE_POINT_MAPPING).map(g => `<option value="${g}" ${course.grade === g ? 'selected' : ''}>${g}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td style="text-align:center;"><button type="button" class="btn-remove edit-c-remove" data-idx="${idx}">&times;</button></td>
+                `;
+                
+                tr.querySelector('.edit-c-code').addEventListener('input', (e) => {
+                    courses[idx].code = e.target.value;
+                });
+                tr.querySelector('.edit-c-subject').addEventListener('input', (e) => {
+                    courses[idx].subject = e.target.value;
+                });
+                tr.querySelector('.edit-c-credits').addEventListener('input', (e) => {
+                    courses[idx].credits = e.target.value === '' ? null : parseFloat(e.target.value);
+                });
+                tr.querySelector('.edit-c-grade').addEventListener('change', (e) => {
+                    courses[idx].grade = e.target.value;
+                });
+                tr.querySelector('.edit-c-remove').addEventListener('click', () => {
+                    courses.splice(idx, 1);
+                    renderRows();
+                });
+                
+                tbody.appendChild(tr);
+            });
+        }
+        
+        renderRows();
+        
+        document.getElementById(`btn-edit-hist-add-${semKey}`).addEventListener('click', () => {
+            courses.push({
+                id: 'course_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                code: '',
+                subject: '',
+                credits: null,
+                grade: '',
+                attemptType: 'original',
+                source: 'manual'
+            });
+            renderRows();
+        });
+    });
+}
+
+// Download PDF Academic Performance Report
+function downloadReportPDF(record) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    
+    const primaryColor = [158, 27, 27]; 
+    const textColor = [33, 37, 41];
+    const mutedColor = [108, 117, 125];
+    
+    // Header Bar
+    doc.setFillColor(...primaryColor);
+    doc.rect(0, 0, 210, 40, "F");
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22);
+    doc.text("NITS Academic Insight", 14, 18);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("Academic Performance Report", 14, 25);
+    doc.text(`Generated: ${new Date(record.updatedAt || record.createdAt || Date.now()).toLocaleString()}`, 14, 32);
+    
+    // Student Info Card
+    doc.setTextColor(...textColor);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("STUDENT INFORMATION", 14, 52);
+    doc.line(14, 54, 196, 54);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Student Name: ${record.studentName || '—'}`, 14, 62);
+    doc.text(`Student ID / Roll No: ${record.studentId || '—'}`, 14, 68);
+    if (record.nickname) {
+        doc.text(`Nickname (Private): ${record.nickname}`, 14, 74);
+    }
+    
+    // Summary Metrics Cards
+    doc.setFillColor(248, 249, 250);
+    doc.rect(14, 82, 182, 26, "F");
+    doc.setDrawColor(222, 226, 230);
+    doc.rect(14, 82, 182, 26, "S");
+    
+    const sum = record.summary || {};
+    doc.setFont("helvetica", "bold");
+    doc.text("CGPA", 24, 90);
+    doc.setFont("helvetica", "normal");
+    doc.text(sum.overallCGPA !== undefined && sum.overallCGPA !== null ? sum.overallCGPA.toFixed(2) : '—', 24, 98);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("Percentage", 74, 90);
+    doc.setFont("helvetica", "normal");
+    doc.text(sum.percentage !== undefined && sum.percentage !== null ? `${sum.percentage.toFixed(1)}%` : '—', 74, 98);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("Credits Earned", 124, 90);
+    doc.setFont("helvetica", "normal");
+    doc.text(sum.totalCredits !== undefined && sum.totalCredits !== null ? String(sum.totalCredits) : '—', 124, 98);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("Active Backlogs", 164, 90);
+    doc.setFont("helvetica", "normal");
+    doc.text(sum.activeBacklogs !== undefined && sum.activeBacklogs !== null ? String(sum.activeBacklogs) : '—', 164, 98);
+    
+    // Semester breakdowns
+    let yPos = 122;
+    const semesters = record.semesters || {};
+    
+    Object.keys(semesters).forEach((semKey) => {
+        const courses = semesters[semKey] || [];
+        if (courses.length === 0) return;
+        
+        if (yPos > 240) {
+            doc.addPage();
+            yPos = 20;
+        }
+        
+        const semTitle = semKey.toUpperCase().replace('SEM', 'Semester ');
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(...primaryColor);
+        doc.text(semTitle, 14, yPos);
+        yPos += 4;
+        
+        // Draw Table Header
+        doc.setFillColor(241, 243, 245);
+        doc.rect(14, yPos, 182, 6, "F");
+        doc.setFontSize(8);
+        doc.setTextColor(...textColor);
+        doc.setFont("helvetica", "bold");
+        doc.text("Course Code", 16, yPos + 4);
+        doc.text("Subject Name", 46, yPos + 4);
+        doc.text("Credits", 136, yPos + 4);
+        doc.text("Grade", 156, yPos + 4);
+        doc.text("Grade Point", 176, yPos + 4);
+        yPos += 7;
+        
+        doc.setFont("helvetica", "normal");
+        courses.forEach(c => {
+            if (yPos > 270) {
+                doc.addPage();
+                yPos = 20;
+            }
+            
+            let subj = c.subject || '—';
+            if (subj.length > 50) subj = subj.substring(0, 47) + '...';
+            
+            doc.text(c.code || '—', 16, yPos);
+            doc.text(subj, 46, yPos);
+            doc.text(c.credits !== null ? String(c.credits) : '—', 136, yPos);
+            doc.text(c.grade || '—', 156, yPos);
+            
+            const gp = GRADE_POINT_MAPPING[c.grade];
+            doc.text(gp !== undefined ? String(gp) : '—', 176, yPos);
+            yPos += 5;
+        });
+        
+        yPos += 6; 
+    });
+    
+    // Page Footer Notes
+    if (yPos > 260) {
+        doc.addPage();
+        yPos = 20;
+    }
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8);
+    doc.setTextColor(...mutedColor);
+    doc.line(14, yPos, 196, yPos);
+    doc.text("Disclaimer: This report is generated by NITS Academic Insight and is intended for informational purposes only.", 14, yPos + 5);
+    
+    // Save report file
+    const filename = `NITS-Academic-Report-${record.studentName || record.nickname || 'Student'}-${record.studentId || 'Report'}.pdf`;
+    doc.save(filename);
+}
+
+// Download CSV Academic Performance Report
+function downloadReportCSV(record) {
+    let csv = 'Semester,Course Code,Subject,Credits,Grade,Grade Point\r\n';
+    
+    const semesters = record.semesters || {};
+    Object.keys(semesters).forEach(semKey => {
+        const courses = semesters[semKey] || [];
+        const semTitle = semKey.toUpperCase().replace('SEM', 'Semester ');
+        courses.forEach(c => {
+            const gp = GRADE_POINT_MAPPING[c.grade] !== undefined ? GRADE_POINT_MAPPING[c.grade] : '—';
+            csv += `"${semTitle}","${c.code || ''}","${c.subject || ''}",${c.credits || 0},"${c.grade || ''}",${gp}\r\n`;
+        });
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `NITS-Academic-Report-${record.studentName || record.nickname || 'Student'}-${record.studentId || 'Report'}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("CSV report exported successfully.", "success");
+}
+
+function openHistoryReport(record) {
+    downloadReportPDF(record);
+    showToast("Report PDF generated successfully.", "success");
+}
+
+// ====================================================
+// PART 26: PROFILE NICKNAMES & RESULT ANALYZER WORKBENCH
+// (SINGLE SOURCE OF TRUTH — state.semesters)
+// ====================================================
+
+state.profiles = state.profiles || [];
+state.activeProfileId = state.activeProfileId || 'default';
+
+function initAnalyzerWorkbench() {
+    loadProfilesFromDb();
+    bindAnalyzerEvents();
+    renderAnalyzerWorkbench();
+}
+
+function loadProfilesFromDb() {
+    const user = state.auth.user;
+    if (user && state.auth.mode === 'firebase' && window.db) {
+        const { collection, getDocs } = window.dbModules || {};
+        if (collection && getDocs) {
+            getDocs(collection(window.db, 'users', user.uid, 'profiles'))
+                .then(snapshot => {
+                    state.profiles = [];
+                    snapshot.forEach(docSnap => {
+                        state.profiles.push({ id: docSnap.id, ...docSnap.data() });
+                    });
+                    if (state.profiles.length === 0) {
+                        createDefaultProfile();
+                    } else {
+                        populateProfileSelect();
+                    }
+                })
+                .catch(err => {
+                    console.warn("Failed to load profiles from Firestore:", err);
+                    loadProfilesFromStorage();
+                });
+            return;
+        }
+    }
+    loadProfilesFromStorage();
+}
+
+function loadProfilesFromStorage() {
+    const saved = localStorage.getItem('nits_profiles');
+    if (saved) {
+        try { state.profiles = JSON.parse(saved); } catch(e) { state.profiles = []; }
+    }
+    if (!state.profiles || state.profiles.length === 0) {
+        createDefaultProfile();
+    } else {
+        populateProfileSelect();
+    }
+}
+
+function createDefaultProfile() {
+    const defaultProfile = {
+        id: 'prof_default',
+        nickname: 'My M.Tech Result',
+        studentName: state.auth.user ? (state.auth.user.displayName || 'Subham Kumar') : 'Subham Kumar',
+        rollNumber: '2314056',
+        createdAt: new Date().toISOString()
+    };
+    state.profiles = [defaultProfile];
+    state.activeProfileId = 'prof_default';
+    saveProfileToStorage();
+    populateProfileSelect();
+}
+
+function saveProfileToStorage() {
+    localStorage.setItem('nits_profiles', JSON.stringify(state.profiles));
+}
+
+function populateProfileSelect() {
+    const select = document.getElementById('analyzer-profile-select');
+    if (!select) return;
+    select.innerHTML = '';
+    
+    state.profiles.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.nickname + (p.studentName ? ` (${p.studentName})` : '');
+        if (p.id === state.activeProfileId) opt.selected = true;
+        select.appendChild(opt);
+    });
+}
+
+function bindAnalyzerEvents() {
+    const addProfileBtn = document.getElementById('btn-add-profile-modal');
+    const closeProfileBtn = document.getElementById('close-profile-modal-btn');
+    const cancelProfileBtn = document.getElementById('btn-cancel-profile-modal');
+    const saveProfileBtn = document.getElementById('btn-save-profile-modal');
+    const profileModal = document.getElementById('create-profile-modal');
+    const profileSelect = document.getElementById('analyzer-profile-select');
+    const semFilter = document.getElementById('analyzer-sem-filter');
+
+    if (addProfileBtn && profileModal) {
+        addProfileBtn.addEventListener('click', () => { profileModal.style.display = 'flex'; });
+    }
+    const hideProfileModal = () => { if (profileModal) profileModal.style.display = 'none'; };
+    if (closeProfileBtn) closeProfileBtn.addEventListener('click', hideProfileModal);
+    if (cancelProfileBtn) cancelProfileBtn.addEventListener('click', hideProfileModal);
+    
+    if (saveProfileBtn) {
+        saveProfileBtn.addEventListener('click', () => {
+            const nickInput = document.getElementById('new-profile-nickname');
+            const nameInput = document.getElementById('new-profile-name');
+            const rollInput = document.getElementById('new-profile-roll');
+            
+            const nickname = (nickInput ? nickInput.value : '').trim();
+            if (!nickname) {
+                showToast("Please enter a profile nickname.", "error");
+                return;
+            }
+            
+            const newProf = {
+                id: 'prof_' + Date.now(),
+                nickname,
+                studentName: (nameInput ? nameInput.value : '').trim(),
+                rollNumber: (rollInput ? rollInput.value : '').trim(),
+                createdAt: new Date().toISOString()
+            };
+            
+            state.profiles.push(newProf);
+            state.activeProfileId = newProf.id;
+            saveProfileToStorage();
+            
+            const user = state.auth.user;
+            if (user && state.auth.mode === 'firebase' && window.db) {
+                const { doc, setDoc } = window.dbModules || {};
+                if (doc && setDoc) {
+                    setDoc(doc(window.db, 'users', user.uid, 'profiles', newProf.id), newProf)
+                        .catch(err => console.warn("Firestore profile save failed:", err));
+                }
+            }
+            
+            populateProfileSelect();
+            hideProfileModal();
+            showToast(`Profile "${nickname}" created.`, "success");
+        });
+    }
+
+    if (profileSelect) {
+        profileSelect.addEventListener('change', (e) => {
+            state.activeProfileId = e.target.value;
+            showToast("Active profile switched.", "info");
+        });
+    }
+
+    if (semFilter) {
+        semFilter.addEventListener('change', () => {
+            renderAnalyzerWorkbench();
+        });
+    }
+
+    const addCourseBtn = document.getElementById('analyzer-add-course-btn');
+    if (addCourseBtn) {
+        addCourseBtn.addEventListener('click', () => {
+            const currentFilter = semFilter ? semFilter.value : 'all';
+            const targetSem = currentFilter !== 'all' ? currentFilter : state.activeSemester;
+            if (!state.semesters[targetSem]) state.semesters[targetSem] = [];
+
+            state.semesters[targetSem].push({
+                id: 'c_' + Date.now(),
+                code: 'CS' + (5100 + state.semesters[targetSem].length + 1),
+                subject: 'New Course',
+                credits: 4,
+                grade: 'A',
+                status: 'passed',
+                academicStatus: 'Regular'
+            });
+            calculateAndRefresh();
+            saveUserDataToStorage();
+            showToast(`Course added to ${targetSem.toUpperCase()}.`, "success");
+        });
+    }
+
+    const btnVerify = document.getElementById('btn-verify-result');
+    const btnImpact = document.getElementById('btn-calculate-impact');
+    const btnSaveHist = document.getElementById('btn-analyzer-save-history');
+    const btnExportPDF = document.getElementById('btn-analyzer-download-pdf');
+    const btnExportCSV = document.getElementById('btn-analyzer-export-csv');
+
+    if (btnVerify) btnVerify.addEventListener('click', verifyAnalyzerResult);
+    if (btnImpact) btnImpact.addEventListener('click', calculateAnalyzerImpact);
+    if (btnSaveHist) btnSaveHist.addEventListener('click', saveAnalyzerToHistory);
+    if (btnExportPDF) btnExportPDF.addEventListener('click', exportAnalyzerPDF);
+    if (btnExportCSV) btnExportCSV.addEventListener('click', exportAnalyzerCSV);
+}
+
+function renderAnalyzerWorkbench() {
+    const tbody = document.getElementById('analyzer-courses-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const semFilter = document.getElementById('analyzer-sem-filter');
+    const selectedSem = semFilter ? semFilter.value : 'all';
+
+    let coursesToDisplay = [];
+
+    if (selectedSem === 'all') {
+        ['sem1', 'sem2', 'sem3', 'sem4'].forEach(semKey => {
+            (state.semesters[semKey] || []).forEach(c => {
+                coursesToDisplay.push({ ...c, _semKey: semKey });
+            });
+        });
+    } else {
+        (state.semesters[selectedSem] || []).forEach(c => {
+            coursesToDisplay.push({ ...c, _semKey: selectedSem });
+        });
+    }
+
+    let totalPoints = 0;
+    let totalCredits = 0;
+    let passedCount = 0;
+    let failedCount = 0;
+
+    coursesToDisplay.forEach((c) => {
+        const tr = document.createElement('tr');
+        const gp = GRADE_POINT_MAPPING[c.grade] !== undefined ? GRADE_POINT_MAPPING[c.grade] : 0;
+        const status = c.status || 'passed';
+
+        if (status === 'passed' || status === 'improvement' || status === 'repeated' || status === 'replaced') {
+            if (c.grade !== 'F' && c.grade !== 'W' && c.grade !== 'EX') {
+                totalPoints += (gp * Number(c.credits || 0));
+                totalCredits += Number(c.credits || 0);
+                passedCount++;
+            } else {
+                failedCount++;
+            }
+        } else if (status === 'failed' || status === 'backlog') {
+            failedCount++;
+            totalCredits += Number(c.credits || 0);
+        }
+
+        tr.innerHTML = `
+            <td><input type="text" class="subject-code-input" value="${c.code || ''}" style="width:100px;" onchange="updateCentralCourse('${c.id}', '${c._semKey}', 'code', this.value)"></td>
+            <td><input type="text" class="subject-name-input" value="${c.subject || ''}" style="width:100%;" onchange="updateCentralCourse('${c.id}', '${c._semKey}', 'subject', this.value)"></td>
+            <td style="text-align:center;"><input type="number" class="subject-credits-input" value="${c.credits || 4}" min="1" max="12" style="width:50px; text-align:center;" onchange="updateCentralCourse('${c.id}', '${c._semKey}', 'credits', this.value)"></td>
+            <td style="text-align:center;">
+                <select class="select-grade" style="padding:2px 4px; font-size:0.8rem;" onchange="updateCentralCourse('${c.id}', '${c._semKey}', 'grade', this.value)">
+                    ${Object.keys(GRADE_POINT_MAPPING).map(g => `<option value="${g}" ${g === c.grade ? 'selected' : ''}>${g}</option>`).join('')}
+                </select>
+            </td>
+            <td style="text-align:center; font-weight:700;">${gp}</td>
+            <td>
+                <select class="select-type" style="padding:2px 4px; font-size:0.78rem;" onchange="updateCentralCourse('${c.id}', '${c._semKey}', 'status', this.value)">
+                    <option value="passed" ${status === 'passed' ? 'selected' : ''}>Passed</option>
+                    <option value="failed" ${status === 'failed' ? 'selected' : ''}>Failed</option>
+                    <option value="backlog" ${status === 'backlog' ? 'selected' : ''}>Backlog</option>
+                    <option value="improvement" ${status === 'improvement' ? 'selected' : ''}>Improvement</option>
+                    <option value="repeated" ${status === 'repeated' ? 'selected' : ''}>Repeated</option>
+                    <option value="replaced" ${status === 'replaced' ? 'selected' : ''}>Replaced</option>
+                    <option value="withdrawn" ${status === 'withdrawn' ? 'selected' : ''}>Withdrawn</option>
+                    <option value="excluded" ${status === 'excluded' ? 'selected' : ''}>Excluded</option>
+                </select>
+            </td>
+            <td style="text-align:center;">
+                <button type="button" class="btn-remove" onclick="deleteCentralCourse('${c.id}', '${c._semKey}')" title="Delete Course">&times;</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    const sgpa = totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : '0.00';
+    
+    const sgpaEl = document.getElementById('analyzer-calc-sgpa');
+    const credEl = document.getElementById('analyzer-calc-credits');
+    const passEl = document.getElementById('analyzer-calc-passed');
+    const failEl = document.getElementById('analyzer-calc-failed');
+
+    if (sgpaEl) sgpaEl.textContent = sgpa;
+    if (credEl) credEl.textContent = totalCredits;
+    if (passEl) passEl.textContent = passedCount;
+    if (failEl) failEl.textContent = failedCount;
+}
+
+window.updateCentralCourse = function(id, semKey, field, val) {
+    const semList = state.semesters[semKey];
+    if (semList) {
+        const course = semList.find(c => c.id === id);
+        if (course) {
+            if (field === 'credits') course[field] = parseFloat(val) || 0;
+            else course[field] = val;
+            calculateAndRefresh();
+            saveUserDataToStorage();
+        }
+    }
+};
+
+window.deleteCentralCourse = function(id, semKey) {
+    if (state.semesters[semKey]) {
+        state.semesters[semKey] = state.semesters[semKey].filter(c => c.id !== id);
+        calculateAndRefresh();
+        saveUserDataToStorage();
+    }
+};
+
+function calculateAnalyzerImpact() {
+    let oldPoints = 0, newPoints = 0, totalCredits = 0, affectedCredits = 0;
+    
+    ['sem1', 'sem2', 'sem3', 'sem4'].forEach(semKey => {
+        (state.semesters[semKey] || []).forEach(c => {
+            const newGP = GRADE_POINT_MAPPING[c.grade] !== undefined ? GRADE_POINT_MAPPING[c.grade] : 0;
+            const cr = Number(c.credits) || 0;
+            totalCredits += cr;
+
+            const status = c.status || 'passed';
+            if (status === 'improvement' || status === 'replaced' || status === 'repeated') {
+                const oldGP = c.prevGradePoint !== undefined ? c.prevGradePoint : Math.max(0, newGP - 2);
+                oldPoints += (oldGP * cr);
+                newPoints += (newGP * cr);
+                affectedCredits += cr;
+            } else {
+                oldPoints += (newGP * cr);
+                newPoints += (newGP * cr);
+            }
+        });
+    });
+
+    const oldSGPA = totalCredits > 0 ? (oldPoints / totalCredits).toFixed(2) : '0.00';
+    const newSGPA = totalCredits > 0 ? (newPoints / totalCredits).toFixed(2) : '0.00';
+    const delta = (parseFloat(newSGPA) - parseFloat(oldSGPA)).toFixed(2);
+
+    const impactCard = document.getElementById('analyzer-impact-card');
+    if (impactCard) impactCard.style.display = 'block';
+
+    const oldEl = document.getElementById('impact-old-sgpa');
+    const newEl = document.getElementById('impact-new-sgpa');
+    const deltaEl = document.getElementById('impact-delta-sgpa');
+    const affEl = document.getElementById('impact-credits-count');
+
+    if (oldEl) oldEl.textContent = oldSGPA;
+    if (newEl) newEl.textContent = newSGPA;
+    if (deltaEl) {
+        deltaEl.textContent = (delta >= 0 ? '+' : '') + delta;
+        deltaEl.style.color = delta >= 0 ? 'var(--success)' : 'var(--danger)';
+    }
+    if (affEl) affEl.textContent = affectedCredits;
+
+    showToast(`Grade Impact Calculated: Net Change ${delta >= 0 ? '+' : ''}${delta} SGPA`, "info");
+}
+
+function verifyAnalyzerResult() {
+    const officialInput = document.getElementById('analyzer-official-sgpa-input');
+    const badge = document.getElementById('analyzer-verification-badge');
+    
+    if (!officialInput || !officialInput.value) {
+        showToast("Please enter the official/reported SGPA to perform verification.", "warning");
+        return;
+    }
+
+    const officialVal = parseFloat(officialInput.value);
+    const sgpaEl = document.getElementById('analyzer-calc-sgpa');
+    const calcVal = parseFloat(sgpaEl ? sgpaEl.textContent : '0');
+
+    const diff = Math.abs(officialVal - calcVal).toFixed(2);
+
+    if (diff < 0.05) {
+        badge.className = 'verification-card-success';
+        badge.style.display = 'block';
+        badge.innerHTML = `✓ Result Verified &mdash; Matches Calculated SGPA (${calcVal})`;
+        showToast("Result verified cleanly. No mismatch detected.", "success");
+    } else {
+        badge.className = 'verification-card-warning';
+        badge.style.display = 'block';
+        badge.innerHTML = `⚠ Result Mismatch &mdash; Expected: ${calcVal}, Entered: ${officialVal} (Diff: ${diff})`;
+        showToast(`Result Mismatch detected: Difference of ${diff} SGPA`, "error");
+    }
+}
+
+function saveAnalyzerToHistory() {
+    const activeProf = state.profiles.find(p => p.id === state.activeProfileId) || { nickname: 'My M.Tech Result', studentName: 'Subham Kumar', rollNumber: '2314056' };
+    const sgpaEl = document.getElementById('analyzer-calc-sgpa');
+    const credEl = document.getElementById('analyzer-calc-credits');
+    const failEl = document.getElementById('analyzer-calc-failed');
+
+    const historyRecord = {
+        id: 'hist_' + Date.now(),
+        profileId: activeProf.id,
+        nickname: activeProf.nickname,
+        studentName: activeProf.studentName || 'Subham Kumar',
+        studentId: activeProf.rollNumber || '2314056',
+        semester: 'Cumulative',
+        savedAt: new Date().toISOString(),
+        summary: {
+            overallSGPA: sgpaEl ? parseFloat(sgpaEl.textContent) : 0,
+            overallCGPA: sgpaEl ? parseFloat(sgpaEl.textContent) : 0,
+            totalCredits: credEl ? parseInt(credEl.textContent) : 0,
+            activeBacklogs: failEl ? parseInt(failEl.textContent) : 0
+        },
+        semesters: JSON.parse(JSON.stringify(state.semesters)),
+        version: 1
+    };
+
+    saveHistoryRecordToDb(historyRecord);
+}
+
+function exportAnalyzerPDF() {
+    const activeProf = state.profiles.find(p => p.id === state.activeProfileId) || { nickname: 'My M.Tech Result', studentName: 'Subham Kumar', rollNumber: '2314056' };
+    const sgpaEl = document.getElementById('analyzer-calc-sgpa');
+    const credEl = document.getElementById('analyzer-calc-credits');
+    const failEl = document.getElementById('analyzer-calc-failed');
+
+    const record = {
+        nickname: activeProf.nickname,
+        studentName: activeProf.studentName,
+        studentId: activeProf.rollNumber,
+        savedAt: new Date().toISOString(),
+        summary: {
+            overallSGPA: sgpaEl ? parseFloat(sgpaEl.textContent) : 0,
+            overallCGPA: sgpaEl ? parseFloat(sgpaEl.textContent) : 0,
+            totalCredits: credEl ? parseInt(credEl.textContent) : 0,
+            activeBacklogs: failEl ? parseInt(failEl.textContent) : 0
+        },
+        semesters: state.semesters
+    };
+    downloadReportPDF(record);
+}
+
+function exportAnalyzerCSV() {
+    const activeProf = state.profiles.find(p => p.id === state.activeProfileId) || { nickname: 'My M.Tech Result', studentName: 'Subham Kumar', rollNumber: '2314056' };
+    const record = {
+        nickname: activeProf.nickname,
+        studentName: activeProf.studentName,
+        studentId: activeProf.rollNumber,
+        semesters: state.semesters
+    };
+    downloadReportCSV(record);
+}
+
+// Auto-initialize workbench on page load
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAnalyzerWorkbench);
+} else {
+    initAnalyzerWorkbench();
+}
+

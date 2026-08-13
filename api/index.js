@@ -29,6 +29,39 @@ const upload = multer({
 app.use(express.static(path.join(__dirname, '..')));
 app.use(express.json());
 
+// Simple zero-dependency environment variable parser for local development
+if (fs.existsSync(path.join(__dirname, '..', '.env'))) {
+    try {
+        const dotenvText = fs.readFileSync(path.join(__dirname, '..', '.env'), 'utf-8');
+        dotenvText.split('\n').forEach(line => {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) return;
+            const idx = trimmed.indexOf('=');
+            if (idx > 0) {
+                const key = trimmed.substring(0, idx).trim();
+                let value = trimmed.substring(idx + 1).trim();
+                if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+                if (value.startsWith("'") && value.endsWith("'")) value = value.slice(1, -1);
+                process.env[key] = value;
+            }
+        });
+    } catch (err) {
+        console.error("Failed to read local .env file:", err);
+    }
+}
+
+// Endpoint to fetch public Firebase configuration dynamically
+app.get('/api/config', (req, res) => {
+    res.json({
+        apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || "",
+        authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN || "",
+        projectId: process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || "",
+        storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || "",
+        messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID || "",
+        appId: process.env.VITE_FIREBASE_APP_ID || process.env.FIREBASE_APP_ID || ""
+    });
+});
+
 // Main Document Analysis Endpoint
 app.post('/api/analyze', upload.single('document'), async (req, res) => {
     if (!req.file) {
@@ -158,13 +191,21 @@ function parseAcademicText(rawText) {
 
     // Detect document keywords
     const lowerText = normalized.toLowerCase();
-    if (lowerText.includes("supplementary") || lowerText.includes("reappear") || lowerText.includes("repeat") || lowerText.includes("improvement") || lowerText.includes("re-examination")) {
-        docType = "supplementary";
-        warnings.push("Supplementary/re-examination information detected. Review before importing.");
+    if (lowerText.includes("supplementary") || lowerText.includes("reappear") || lowerText.includes("repeat") || lowerText.includes("re-appear")) {
+        docType = "supplementary_result";
+        warnings.push("Supplementary result sheet detected. Review before importing.");
+    } else if (lowerText.includes("re-examination") || lowerText.includes("re examination") || lowerText.includes("re-exam")) {
+        docType = "re-examination_result";
+        warnings.push("Re-examination result sheet detected. Review before importing.");
+    } else if (lowerText.includes("improvement")) {
+        docType = "improvement_result";
+        warnings.push("Improvement result sheet detected. Review before importing.");
     } else if (lowerText.includes("grade card") || lowerText.includes("grade sheet") || lowerText.includes("academic record")) {
         docType = "grade_card";
     } else if (lowerText.includes("marksheet") || lowerText.includes("mark sheet") || lowerText.includes("statement of marks")) {
         docType = "marksheet";
+    } else {
+        docType = "other";
     }
 
     // Split text into semester blocks
@@ -237,8 +278,12 @@ function parseAcademicText(rawText) {
             attemptType = "re-examination";
         } else if (blockTextLower.includes("supplementary") || blockTextLower.includes("reappear") || blockTextLower.includes("re-appear") || blockTextLower.includes("repeat") || blockTextLower.includes("back paper") || blockTextLower.includes("backlog")) {
             attemptType = "supplementary";
-        } else if (docType === "supplementary") {
+        } else if (docType === "supplementary_result") {
             attemptType = "supplementary";
+        } else if (docType === "re-examination_result") {
+            attemptType = "re-examination";
+        } else if (docType === "improvement_result") {
+            attemptType = "improvement";
         }
 
         const subjects = [];
@@ -248,12 +293,19 @@ function parseAcademicText(rawText) {
             const cleanLine = line.trim();
             if (cleanLine.length < 5) return;
 
+            // Search for roll number (e.g. 23-15-101 or 2315101)
+            const rollMatch = cleanLine.match(/\b(\d{2}[-\/]?\d{2,3}[-\/]?\d{3}|\d{7,9})\b/);
+            const rollNumber = rollMatch ? rollMatch[1] : "";
+
             // Search for course code regex (e.g. CS-501, CS501, MA-102)
             const codeMatch = cleanLine.match(/\b([A-Z]{2,4}[- ]?[0-9]{3,5})\b/i);
             if (!codeMatch) return;
 
             const courseCode = codeMatch[1];
             let remainingText = cleanLine.replace(courseCode, '').trim();
+            if (rollNumber) {
+                remainingText = remainingText.replace(rollNumber, '').trim();
+            }
 
             // Extract grade (AA, AB, BB, BC, CC, CD, DD, F, W)
             let grade = "";
@@ -280,14 +332,12 @@ function parseAcademicText(rawText) {
             // Extract credits (usually integer or float 1.5, 2.5, 3.0, 4.0)
             let credits = "";
             let creditsConfidence = "low";
-            // Look for credits accompanied by labels first
             const creditsLabeledMatch = remainingText.match(/\b([1-4](?:\.[0-9]+)?)\s*(?:credits?|cr)\b/i);
             if (creditsLabeledMatch) {
                 credits = parseFloat(creditsLabeledMatch[1]);
                 creditsConfidence = "high";
                 remainingText = remainingText.replace(/\b([1-4](?:\.[0-9]+)?)\s*(?:credits?|cr)\b/i, '').trim();
             } else {
-                // Secondary check for loose numbers representing credits
                 const creditsLooseMatch = remainingText.match(/\b([1-4](?:\.[50])?)\b/);
                 if (creditsLooseMatch) {
                     credits = parseFloat(creditsLooseMatch[1]);
@@ -310,13 +360,13 @@ function parseAcademicText(rawText) {
             if (grade === "F") status = "Backlog";
             if (grade === "W") status = "Withdrawn";
 
-            // The leftover text is likely the course name
             const courseName = remainingText
-                .replace(/[^a-zA-Z0-9\s]/g, '') // remove trailing weird characters
+                .replace(/[^a-zA-Z0-9\s]/g, '')
                 .replace(/\s+/g, ' ')
                 .trim();
 
             subjects.push({
+                rollNumber: rollNumber,
                 code: courseCode,
                 name: courseName || "Course Name",
                 credits: credits !== "" ? credits : "",
