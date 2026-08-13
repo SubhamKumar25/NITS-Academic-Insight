@@ -385,8 +385,50 @@ document.addEventListener('DOMContentLoaded', () => {
     initHistorySystem();
 });
 
+// Navigation Tab Switcher
+function switchTab(tabId) {
+    const tabs = ['calculator', 'advanced-calc', 'history', 'analysis'];
+    tabs.forEach(t => {
+        const sec = document.getElementById(t);
+        if (sec) sec.style.display = (t === tabId) ? 'block' : 'none';
+        
+        const navId = t === 'advanced-calc' ? 'nav-advanced-btn' : `nav-${t}-btn`;
+        const navBtn = document.getElementById(navId);
+        if (navBtn) {
+            if (t === tabId) navBtn.classList.add('active');
+            else navBtn.classList.remove('active');
+        }
+
+        const mobId = t === 'advanced-calc' ? 'mob-advanced-btn' : `mob-${t}-btn`;
+        const mobBtn = document.getElementById(mobId);
+        if (mobBtn) {
+            if (t === tabId) mobBtn.classList.add('active');
+            else mobBtn.classList.remove('active');
+        }
+    });
+
+    state.activeTab = tabId;
+
+    if (tabId === 'history') {
+        loadHistoryFromDb();
+    } else if (tabId === 'analysis') {
+        renderAnalysis();
+    }
+}
+
 // Initialize All UI Event Listeners
 function initEventListeners() {
+    // Navigation Links
+    document.getElementById('nav-calc-btn')?.addEventListener('click', (e) => { e.preventDefault(); switchTab('calculator'); });
+    document.getElementById('nav-advanced-btn')?.addEventListener('click', (e) => { e.preventDefault(); switchTab('advanced-calc'); });
+    document.getElementById('nav-history-btn')?.addEventListener('click', (e) => { e.preventDefault(); switchTab('history'); });
+    document.getElementById('nav-analysis-btn')?.addEventListener('click', (e) => { e.preventDefault(); switchTab('analysis'); });
+
+    document.getElementById('mob-calc-btn')?.addEventListener('click', (e) => { e.preventDefault(); switchTab('calculator'); });
+    document.getElementById('mob-advanced-btn')?.addEventListener('click', (e) => { e.preventDefault(); switchTab('advanced-calc'); });
+    document.getElementById('mob-history-btn')?.addEventListener('click', (e) => { e.preventDefault(); switchTab('history'); });
+    document.getElementById('mob-analysis-btn')?.addEventListener('click', (e) => { e.preventDefault(); switchTab('analysis'); });
+
     // Radio toggle for calculation method
     document.querySelectorAll('input[name="calc-method"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
@@ -399,12 +441,15 @@ function initEventListeners() {
     toggleCalculatorMode();
 
     // Add Course Row
-    dom.addSubjectBtn.addEventListener('click', () => {
+    dom.addSubjectBtn?.addEventListener('click', () => {
         addSubject(state.activeSemester);
     });
 
-    // Reset Current Result (header button)
-    dom.resetBtn.addEventListener('click', () => {
+    // Reset Current Result (header button & bottom button)
+    dom.resetBtn?.addEventListener('click', () => {
+        resetCurrentResult();
+    });
+    document.getElementById('reset-btn-bottom')?.addEventListener('click', () => {
         resetCurrentResult();
     });
 
@@ -421,7 +466,7 @@ function initEventListeners() {
     // Custom CGPA Checkboxes
     const checkboxes = [dom.checkSem1, dom.checkSem2, dom.checkSem3, dom.checkSem4];
     checkboxes.forEach(chk => {
-        chk.addEventListener('change', (e) => {
+        chk?.addEventListener('change', (e) => {
             const sem = e.target.getAttribute('data-sem');
             state.selectedSemesters[sem] = e.target.checked;
             calculateAndRefresh();
@@ -429,41 +474,28 @@ function initEventListeners() {
     });
 
     // Custom analysis actions
-    dom.analysisSelectAll.addEventListener('click', () => {
+    dom.analysisSelectAll?.addEventListener('click', () => {
         setAllCheckboxes(true);
     });
 
-    dom.analysisClearAll.addEventListener('click', () => {
+    dom.analysisClearAll?.addEventListener('click', () => {
         setAllCheckboxes(false);
     });
 
-    // Filter dropdown elements change listeners
-    dom.filterSemester.addEventListener('change', () => {
-        renderSubjectTable();
-    });
-    dom.filterStatus.addEventListener('change', () => {
-        renderSubjectTable();
-    });
-    dom.filterGrade.addEventListener('change', () => {
-        renderSubjectTable();
-    });
-
     // Print analysis trigger
-    dom.printAnalysisBtn.addEventListener('click', () => {
+    dom.printAnalysisBtn?.addEventListener('click', () => {
         window.print();
     });
 
-    // + New Result button (Creates New Student Profile)
+    // + New Student button (Creates a new Student Profile)
+    document.getElementById('btn-new-student')?.addEventListener('click', () => {
+        handleNewStudent();
+    });
+
+    // + New Result button (Creates a new result calculation under active Student Profile)
     if (dom.btnNewResult) {
         dom.btnNewResult.addEventListener('click', () => {
             handleNewResult();
-        });
-    }
-
-    // + New Calculation button (Adds calculation to active Student Profile)
-    if (dom.btnNewCalculation) {
-        dom.btnNewCalculation.addEventListener('click', () => {
-            handleNewCalculation();
         });
     }
 
@@ -473,6 +505,7 @@ function initEventListeners() {
             saveCurrentToHistory();
         });
     }
+
 
     // Student Profile Name Input
     if (dom.calcStudentName) {
@@ -4268,31 +4301,34 @@ function clearCurrentDraft(uid) {
 // TWO-LEVEL FLOW: STUDENT PROFILE & CALCULATIONS
 // ============================================================
 
-// 1. "+ NEW RESULT" -> Creates a brand new Student Profile
-function handleNewResult() {
-    const hasCourses = Object.values(state.semesters).some(arr => arr.some(c => c.grade !== ''));
+// 1. "+ NEW STUDENT" -> Creates a brand new Student Profile
+function handleNewStudent() {
+    const hasCourses = Object.values(state.semesters).some(arr => arr.some(c => c.grade !== '' && c.grade !== null));
     const doCreate = () => {
+        const newProfId = 'prof_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+        const newCalcId = 'result_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+
         state.currentProfile = {
-            profileId: null,
+            profileId: newProfId,
             studentName: 'Rohit',
             program: 'mtech',
-            department: 'cse'
+            department: dom.calcDepartmentSelect?.value || 'cse'
         };
 
         state.currentCalculation = {
-            calculationId: null,
-            resultNickname: 'Main Result',
+            calculationId: newCalcId,
+            resultNickname: 'Current Result',
             isDirty: false,
-            mode: 'normal'
+            mode: 'normal',
+            situation: 'normal'
         };
 
         ['sem1', 'sem2', 'sem3', 'sem4'].forEach(s => { state.semesters[s] = []; });
         state.selectedSemesters = { sem1: false, sem2: false, sem3: false, sem4: false };
 
         if (dom.calcStudentName) dom.calcStudentName.value = 'Rohit';
-        if (dom.calcResultNickname) dom.calcResultNickname.value = 'Main Result';
+        if (dom.calcResultNickname) dom.calcResultNickname.value = 'Current Result';
         if (dom.calcProgramSelect) dom.calcProgramSelect.value = 'mtech';
-        if (dom.calcDepartmentSelect) dom.calcDepartmentSelect.value = 'cse';
         if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = 'Rohit';
 
         applyPredefinedCourses();
@@ -4302,15 +4338,12 @@ function handleNewResult() {
         const statusEl = document.getElementById('auto-save-status');
         if (statusEl) statusEl.textContent = '';
 
-        const calcTab = document.getElementById('nav-calc-btn');
-        if (calcTab) calcTab.click();
-
-        showToast('Started a new Student Profile. Enter profile & result details.', 'info');
+        showToast('Created new Student Profile "Rohit". Enter result details.', 'info');
     };
 
     if (hasCourses && state.currentCalculation.isDirty) {
         showConfirmModal(
-            'Create a new Student Profile? Unsaved changes in the active calculation will be cleared. Saved History records will not be affected.',
+            'Create a new Student Profile? Unsaved changes in active calculation will be cleared. Saved History will not be affected.',
             doCreate
         );
     } else {
@@ -4318,26 +4351,31 @@ function handleNewResult() {
     }
 }
 
-// 2. "+ NEW CALCULATION" -> Adds a new calculation under the SAME Student Profile
-function handleNewCalculation() {
+// 2. "+ NEW RESULT" -> Creates a new result under the CURRENT Student Profile
+function handleNewResult() {
     const studentName = (dom.calcStudentName?.value || state.currentProfile.studentName || 'Rohit').trim();
     state.currentProfile.studentName = studentName;
     if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = studentName;
 
-    const hasCourses = Object.values(state.semesters).some(arr => arr.some(c => c.grade !== ''));
+    const hasCourses = Object.values(state.semesters).some(arr => arr.some(c => c.grade !== '' && c.grade !== null));
     const doAddCalc = () => {
-        // Keep currentProfile intact (profileId, studentName, program, department)
+        if (!state.currentProfile.profileId) {
+            state.currentProfile.profileId = 'prof_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+        }
+
+        const newCalcId = 'result_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
         state.currentCalculation = {
-            calculationId: null,
-            resultNickname: 'Supplementary Result',
+            calculationId: newCalcId,
+            resultNickname: '1st–2nd Semester',
             isDirty: false,
-            mode: 'normal'
+            mode: 'normal',
+            situation: 'normal'
         };
 
         ['sem1', 'sem2', 'sem3', 'sem4'].forEach(s => { state.semesters[s] = []; });
         state.selectedSemesters = { sem1: false, sem2: false, sem3: false, sem4: false };
 
-        if (dom.calcResultNickname) dom.calcResultNickname.value = 'Supplementary Result';
+        if (dom.calcResultNickname) dom.calcResultNickname.value = '1st–2nd Semester';
 
         applyPredefinedCourses();
         calculateAndRefresh();
@@ -4346,15 +4384,12 @@ function handleNewCalculation() {
         const statusEl = document.getElementById('auto-save-status');
         if (statusEl) statusEl.textContent = '';
 
-        const calcTab = document.getElementById('nav-calc-btn');
-        if (calcTab) calcTab.click();
-
-        showToast(`New calculation started under profile: ${studentName}`, 'success');
+        showToast(`New result calculation started under profile: ${studentName}`, 'success');
     };
 
     if (hasCourses && state.currentCalculation.isDirty) {
         showConfirmModal(
-            `Add a new calculation under "${studentName}"? Unsaved changes in the current calculation will be cleared.`,
+            `Create a new result calculation under "${studentName}"? Unsaved grades in current calculation will be cleared.`,
             doAddCalc
         );
     } else {
@@ -4362,14 +4397,17 @@ function handleNewCalculation() {
     }
 }
 
-// 3. Resets current active calculation draft (does NOT touch profile or history)
+// 3. Resets ONLY current active calculation draft (does NOT touch profile or saved history)
 function resetCurrentResult() {
     showConfirmModal(
-        'Reset current calculation? Unsaved grades in this calculation will be cleared. Saved History records and Student Profiles will not be affected.',
+        'Reset current calculation workspace? Unsaved grades will be cleared. Saved History records will remain untouched.',
         () => {
             const uid = state.auth.user ? state.auth.user.uid : null;
             state.currentCalculation.calculationId = null;
+            state.currentCalculation.resultNickname = 'Current Result';
             state.currentCalculation.isDirty = false;
+
+            if (dom.calcResultNickname) dom.calcResultNickname.value = 'Current Result';
 
             ['sem1', 'sem2', 'sem3', 'sem4'].forEach(s => { state.semesters[s] = []; });
             applyPredefinedCourses();
@@ -4427,42 +4465,23 @@ async function saveCurrentToHistory() {
     };
 
     try {
+        let profileId = state.currentProfile.profileId || ('prof_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
+        let calcId = state.currentCalculation.calculationId || ('result_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
+        state.currentProfile.profileId = profileId;
+
         if (state.auth.mode === 'firebase') {
             const db = getFirebaseDb();
             if (db) {
-                // STEP A: Ensure Student Profile Document exists
-                let profileId = state.currentProfile.profileId;
+                // Save Profile Doc
+                await setDoc(doc(db, "users", uid, "resultProfiles", profileId), {
+                    ownerUid: uid,
+                    studentName,
+                    program,
+                    department,
+                    updatedAt: serverTimestamp()
+                }, { merge: true });
 
-                // Look up if profile with matching name exists in local history if profileId not set
-                if (!profileId) {
-                    const existingProf = stateProfileHistory.find(p => p.studentName.toLowerCase() === studentName.toLowerCase() && p.program === program && p.department === department);
-                    if (existingProf) {
-                        profileId = existingProf.profileId;
-                    }
-                }
-
-                if (!profileId) {
-                    const profRef = await addDoc(collection(db, "users", uid, "resultProfiles"), {
-                        ownerUid: uid,
-                        studentName,
-                        program,
-                        department,
-                        createdAt: serverTimestamp(),
-                        updatedAt: serverTimestamp()
-                    });
-                    profileId = profRef.id;
-                } else {
-                    await setDoc(doc(db, "users", uid, "resultProfiles", profileId), {
-                        studentName,
-                        program,
-                        department,
-                        updatedAt: serverTimestamp()
-                    }, { merge: true });
-                }
-                state.currentProfile.profileId = profileId;
-
-                // STEP B: Save Calculation Document under profile's calculations subcollection
-                let calcId = state.currentCalculation.calculationId;
+                // Save Calculation Doc
                 const calcPayload = {
                     profileId,
                     ownerUid: uid,
@@ -4476,24 +4495,15 @@ async function saveCurrentToHistory() {
                     updatedAt: serverTimestamp()
                 };
 
-                if (calcId) {
-                    await setDoc(doc(db, "users", uid, "resultProfiles", profileId, "calculations", calcId), calcPayload, { merge: true });
-                    showToast(`Calculation "${resultNickname}" updated under profile "${studentName}".`, "success");
-                } else {
-                    calcPayload.createdAt = serverTimestamp();
-                    const calcRef = await addDoc(collection(db, "users", uid, "resultProfiles", profileId, "calculations"), calcPayload);
-                    state.currentCalculation.calculationId = calcRef.id;
-                    showToast(`Saved calculation "${resultNickname}" under profile "${studentName}".`, "success");
-                }
+                await setDoc(doc(db, "users", uid, "resultProfiles", profileId, "calculations", calcId), calcPayload, { merge: true });
+                showToast(`Saved result "${resultNickname}" under "${studentName}".`, "success");
             }
         } else {
             // Mock Mode
             let mockProfiles = JSON.parse(localStorage.getItem(`nits_mock_result_profiles_${uid}`) || '[]');
-            let profileId = state.currentProfile.profileId;
-            let existingProf = mockProfiles.find(p => (profileId && p.profileId === profileId) || (p.studentName.toLowerCase() === studentName.toLowerCase() && p.program === program && p.department === department));
+            let existingProf = mockProfiles.find(p => p.profileId === profileId);
 
             if (!existingProf) {
-                profileId = 'prof_' + Date.now();
                 existingProf = {
                     profileId,
                     studentName,
@@ -4507,12 +4517,7 @@ async function saveCurrentToHistory() {
             } else {
                 existingProf.studentName = studentName;
                 existingProf.updatedAt = Date.now();
-                profileId = existingProf.profileId;
             }
-            state.currentProfile.profileId = profileId;
-
-            let calcId = state.currentCalculation.calculationId || ('calc_' + Date.now());
-            state.currentCalculation.calculationId = calcId;
 
             const existingCalcIdx = (existingProf.calculations || []).findIndex(c => c.calculationId === calcId);
             const calcObj = {
@@ -4536,21 +4541,29 @@ async function saveCurrentToHistory() {
             }
 
             localStorage.setItem(`nits_mock_result_profiles_${uid}`, JSON.stringify(mockProfiles));
-            showToast(`Mock: Saved calculation "${resultNickname}" under "${studentName}".`, "success");
+            showToast(`Saved result "${resultNickname}" under "${studentName}".`, "success");
         }
 
         clearCurrentDraft(uid);
         state.currentCalculation.isDirty = false;
 
+        // Post-save: return calculator workspace to a clean state for next entry
+        state.currentCalculation.calculationId = null;
+        ['sem1', 'sem2', 'sem3', 'sem4'].forEach(s => { state.semesters[s] = []; });
+        applyPredefinedCourses();
+        calculateAndRefresh();
+        render();
+
         const statusEl = document.getElementById('auto-save-status');
-        if (statusEl) { statusEl.textContent = 'Saved to History ✓'; statusEl.style.color = 'var(--success)'; }
+        if (statusEl) { statusEl.textContent = 'Result Saved ✓'; statusEl.style.color = 'var(--success)'; }
 
         await loadHistoryFromDb();
     } catch (err) {
-        console.error("Error saving to history:", err);
+        console.error("Error saving result to database:", err);
         showToast("Error saving calculation: " + err.message, "error");
     }
 }
+
 
 
 
