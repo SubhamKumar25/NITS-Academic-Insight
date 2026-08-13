@@ -295,13 +295,12 @@
                         <p id="marks-method-desc" style="display:none;">Enter marks only when you need the calculator to determine the grade. Marks are normalized to 100 according to the NIT Silchar M.Tech grading rules.</p>
                     </div>
 
-                    <!-- Result Profile, Program & Department Details -->
+                    <!-- Result Program & Department Details -->
                     <div class="student-info-section" style="background:var(--surface); border: 1px solid var(--border); padding: 16px; border-radius: var(--r-md); margin-bottom: 20px; box-shadow: var(--shadow-sm);">
                         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
                             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                                <label for="calc-profile-select" style="font-size: 0.82rem; font-weight: 700; color: var(--text);">Active Result:</label>
-                                <select id="calc-profile-select" class="select-type" style="min-height: 36px; padding: 4px 12px; font-weight: 700; font-size: 0.85rem; max-width: 260px;"></select>
-                                <button type="button" class="btn btn-secondary btn-sm" id="btn-calc-new-profile" style="min-height: 36px;">+ New Result</button>
+                                <span style="font-size: 0.88rem; font-weight: 700; color: var(--text);">Current Result</span>
+                                <button type="button" class="btn btn-secondary btn-sm" id="btn-new-result" style="min-height: 34px;">+ New Result</button>
                             </div>
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <label class="checkbox-label" style="font-size: 0.82rem; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;">
@@ -311,7 +310,7 @@
                         </div>
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
                             <div class="form-group" style="margin-bottom:0;">
-                                <label for="calc-result-nickname" style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Result Name / Nickname *</label>
+                                <label for="calc-result-nickname" style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Result Name / Label *</label>
                                 <input type="text" id="calc-result-nickname" class="dash-search-input" placeholder="e.g. My M.Tech Result" value="My M.Tech Result" style="min-height: 36px;">
                             </div>
                             <div class="form-group" style="margin-bottom:0;">
@@ -324,6 +323,7 @@
                                 <label for="calc-department-select" style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Department</label>
                                 <select id="calc-department-select" class="select-type" style="width:100%; min-height: 36px;">
                                     <option value="cse">Computer Science and Engineering</option>
+                                    <option value="aiml">Artificial Intelligence and Machine Learning</option>
                                 </select>
                             </div>
                         </div>
@@ -362,9 +362,11 @@
                         <p class="empty-state-sub">Add a subject to begin calculating your semester result.</p>
                     </div>
 
-                    <div class="calc-actions-bar">
+                    <div class="calc-actions-bar" style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
                         <button type="button" class="btn btn-add-subject" id="add-subject-btn">+ Add Subject</button>
+                        <button type="button" class="btn btn-primary" id="btn-save-to-history" style="background-color:var(--success, #10b981); border-color:var(--success, #10b981); font-weight:700;">Save to History</button>
                     </div>
+
 
                     <div class="semester-overview" id="semester-overview-panel" style="display:none;">
                         <div class="overview-grid">
@@ -924,45 +926,7 @@
         </div>
     </div>
 
-    <!-- 30. Create Result/Profile Modal -->
-    <div class="modal" id="create-profile-modal" style="display:none;">
-        <div class="modal-overlay"></div>
-        <div class="modal-content" style="max-width:420px; width:90%;">
-            <div class="modal-header">
-                <h3>Create New Result</h3>
-                <button type="button" class="btn-remove" id="close-profile-modal-btn" style="font-size:1.3rem;">&times;</button>
-            </div>
-            <div class="modal-body" style="padding:16px 20px;">
-                <div class="form-group" style="margin-bottom:12px;">
-                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Result Name / Nickname *</label>
-                    <input type="text" id="new-profile-nickname" class="dash-search-input" placeholder="e.g. My M.Tech Result, Rohit's Result">
-                </div>
-                <div class="form-group" style="margin-bottom:12px;">
-                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Whose Result?</label>
-                    <select id="new-profile-type" class="select-type" style="width:100%; min-height: 36px;">
-                        <option value="own">My Result</option>
-                        <option value="other">Someone Else's Result</option>
-                    </select>
-                </div>
-                <div class="form-group" style="margin-bottom:12px;">
-                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Program</label>
-                    <select id="new-profile-prog" class="select-type" style="width:100%; min-height: 36px;">
-                        <option value="mtech">M.Tech</option>
-                    </select>
-                </div>
-                <div class="form-group" style="margin-bottom:4px;">
-                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Department</label>
-                    <select id="new-profile-dept" class="select-type" style="width:100%; min-height: 36px;">
-                        <option value="cse">Computer Science and Engineering</option>
-                    </select>
-                </div>
-            </div>
-            <div class="modal-footer" style="padding:8px 20px;">
-                <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-profile-modal">Cancel</button>
-                <button type="button" class="btn btn-primary btn-sm" id="btn-save-profile-modal">Create Result</button>
-            </div>
-        </div>
-    </div>
+
 
     <div class="toast-container" id="toast-container" aria-live="polite"></div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
