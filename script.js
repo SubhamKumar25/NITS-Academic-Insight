@@ -83,6 +83,9 @@ const state = {
     unlinkedRepeats: []
 };
 
+// Global Student Profiles & History Records State
+let stateProfileHistory = [];
+
 // M.Tech Theory Grading Rules (91-100 AA, 81-90 AB, etc.)
 const THEORY_GRADING = [
     { min: 91, max: 100, grade: 'AA', gp: 10 },
@@ -374,18 +377,81 @@ const dom = {
     currentProfileDisplayBadge: document.getElementById('current-profile-display-badge')
 };
 
-// Initial setup
+// Initial setup & safe application bootstrap
 document.addEventListener('DOMContentLoaded', () => {
-    initEventListeners();
-    initAnalyzerEvents();
-    initAttemptEvents();
+    try { initMobileMenu(); } catch (e) { console.warn("initMobileMenu error:", e); }
+    try { initGradeRulesTabs(); } catch (e) { console.warn("initGradeRulesTabs error:", e); }
+    try { initDashboardSearch(); } catch (e) { console.warn("initDashboardSearch error:", e); }
+    try { initAccessibilityKeys(); } catch (e) { console.warn("initAccessibilityKeys error:", e); }
+    try { checkServiceAvailability(); } catch (e) { console.warn("checkServiceAvailability error:", e); }
+    try { initEventListeners(); } catch (e) { console.error("initEventListeners error:", e); }
+    try { initAnalyzerEvents(); } catch (e) { console.error("initAnalyzerEvents error:", e); }
+    try { initAttemptEvents(); } catch (e) { console.error("initAttemptEvents error:", e); }
+
     if (!state.semesters.sem1 || state.semesters.sem1.length === 0) {
-        applyPredefinedCourses();
+        try { applyPredefinedCourses(); } catch (e) { console.error("applyPredefinedCourses error:", e); }
     }
-    render();
-    initAuth();
-    initHistorySystem();
+
+    try { render(); } catch (e) { console.error("render error:", e); }
+    try { initHistorySystem(); } catch (e) { console.error("initHistorySystem error:", e); }
+
+    // Init Auth last — guaranteed fallback hides loading overlay
+    try {
+        initAuth();
+    } catch (e) {
+        console.error("initAuth error:", e);
+        hideLoadingOverlay();
+    }
 });
+
+
+// Render Academic Analysis Progress Tracker
+function renderAnalysis() {
+    const emptyState = document.getElementById('dashboard-empty-state');
+    const contents = document.getElementById('dashboard-contents');
+
+    // Aggregate saved calculations across all loaded student profiles
+    let allCalculations = [];
+    (stateProfileHistory || []).forEach(prof => {
+        (prof.calculations || []).forEach(c => {
+            allCalculations.push({
+                studentName: prof.studentName,
+                program: prof.program,
+                department: prof.department,
+                ...c
+            });
+        });
+    });
+
+    if (allCalculations.length === 0) {
+        if (emptyState) emptyState.style.display = 'block';
+        if (contents) contents.style.display = 'none';
+        return;
+    }
+
+    if (emptyState) emptyState.style.display = 'none';
+    if (contents) contents.style.display = 'block';
+
+    const latest = allCalculations[0];
+    const sum = latest.summary || {};
+
+    const cgpa = sum.overallCGPA !== undefined && sum.overallCGPA !== null ? Number(sum.overallCGPA).toFixed(2) : '—';
+    const pct = sum.percentage !== undefined && sum.percentage !== null ? Number(sum.percentage).toFixed(1) + '%' : (sum.overallCGPA ? (Number(sum.overallCGPA) * 10).toFixed(1) + '%' : '—');
+    const credits = sum.totalCredits !== undefined && sum.totalCredits !== null ? String(sum.totalCredits) : '—';
+    const backlogs = sum.activeBacklogs !== undefined && sum.activeBacklogs !== null ? String(sum.activeBacklogs) : '—';
+
+    const dashCurrentSgpa = document.getElementById('dash-current-sgpa');
+    const dashOverallCgpa = document.getElementById('dash-overall-cgpa');
+    const dashPercentage = document.getElementById('dash-percentage');
+    const dashTotalCredits = document.getElementById('dash-total-credits');
+    const dashActiveBacklogs = document.getElementById('dash-active-backlogs');
+
+    if (dashCurrentSgpa) dashCurrentSgpa.textContent = cgpa;
+    if (dashOverallCgpa) dashOverallCgpa.textContent = cgpa;
+    if (dashPercentage) dashPercentage.textContent = pct;
+    if (dashTotalCredits) dashTotalCredits.textContent = credits;
+    if (dashActiveBacklogs) dashActiveBacklogs.textContent = backlogs;
+}
 
 // Navigation Tab Switcher
 function switchTab(tabId) {
@@ -1618,11 +1684,13 @@ function resetCalculator() {
     document.querySelectorAll('.sem-tab').forEach(tab => {
         tab.classList.remove('active');
     });
-    document.getElementById('tab-sem1').classList.add('active');
+    const sem1Tab = document.getElementById('tab-sem1');
+    if (sem1Tab) sem1Tab.classList.add('active');
 
     // Full UI redraw
     render();
 }
+
 
 // ==============================================================
 // PART 3: RESULT ANALYZER LOGIC
@@ -1630,79 +1698,95 @@ function resetCalculator() {
 
 // File Drag and Drop Event Listeners
 function initAnalyzerEvents() {
-    // Drag & Drop hover effects
-    dom.uploadDropzone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dom.uploadDropzone.classList.add('drag-over');
-    });
+    if (dom.uploadDropzone) {
+        dom.uploadDropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dom.uploadDropzone.classList.add('drag-over');
+        });
 
-    dom.uploadDropzone.addEventListener('dragleave', () => {
-        dom.uploadDropzone.classList.remove('drag-over');
-    });
+        dom.uploadDropzone.addEventListener('dragleave', () => {
+            dom.uploadDropzone.classList.remove('drag-over');
+        });
 
-    dom.uploadDropzone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dom.uploadDropzone.classList.remove('drag-over');
-        if (e.dataTransfer.files.length > 0) {
-            handleFileSelection(e.dataTransfer.files[0]);
-        }
-    });
+        dom.uploadDropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dom.uploadDropzone.classList.remove('drag-over');
+            if (e.dataTransfer.files.length > 0) {
+                handleFileSelection(e.dataTransfer.files[0]);
+            }
+        });
 
-    // File selection via browsing
-    dom.uploadDropzone.addEventListener('click', () => {
-        dom.fileInput.click();
-    });
+        dom.uploadDropzone.addEventListener('click', () => {
+            if (dom.fileInput) dom.fileInput.click();
+        });
+    }
 
-    dom.fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            handleFileSelection(e.target.files[0]);
-        }
-    });
+    if (dom.fileInput) {
+        dom.fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelection(e.target.files[0]);
+            }
+        });
+    }
 
-    // Remove file selection
-    dom.removeFileBtn.addEventListener('click', () => {
-        removeUploadedFile();
-    });
+    if (dom.removeFileBtn) {
+        dom.removeFileBtn.addEventListener('click', () => {
+            removeUploadedFile();
+        });
+    }
 
-    // Analyze document trigger
-    dom.analyzeBtn.addEventListener('click', () => {
-        analyzeDocument();
-    });
+    if (dom.analyzeBtn) {
+        dom.analyzeBtn.addEventListener('click', () => {
+            analyzeDocument();
+        });
+    }
 
-    // Verification row operations
-    dom.addVerificationRowBtn.addEventListener('click', () => {
-        addExtractedSubject();
-    });
+    if (dom.addVerificationRowBtn) {
+        dom.addVerificationRowBtn.addEventListener('click', () => {
+            addExtractedSubject();
+        });
+    }
 
-    // Confirm import into calculator
-    dom.confirmImportBtn.addEventListener('click', () => {
-        confirmImport();
-    });
+    if (dom.confirmImportBtn) {
+        dom.confirmImportBtn.addEventListener('click', () => {
+            confirmImport();
+        });
+    }
 
-    // Cancel extraction session
-    dom.cancelExtractionBtn.addEventListener('click', () => {
-        cancelExtraction();
-    });
+    if (dom.cancelExtractionBtn) {
+        dom.cancelExtractionBtn.addEventListener('click', () => {
+            cancelExtraction();
+        });
+    }
 
-    // Document comparison updates
-    dom.docSgpaInput.addEventListener('input', () => {
-        calculateVerificationMetrics();
-    });
-    dom.docCgpaInput.addEventListener('input', () => {
-        calculateVerificationMetrics();
-    });
+    if (dom.docSgpaInput) {
+        dom.docSgpaInput.addEventListener('input', () => {
+            calculateVerificationMetrics();
+        });
+    }
+    if (dom.docCgpaInput) {
+        dom.docCgpaInput.addEventListener('input', () => {
+            calculateVerificationMetrics();
+        });
+    }
 
-    // Conflict resolution modal buttons
-    dom.dupKeepExisting.addEventListener('click', () => {
-        resolveDuplicate('keep');
-    });
-    dom.dupUseUploaded.addEventListener('click', () => {
-        resolveDuplicate('overwrite');
-    });
-    dom.dupAddSeparate.addEventListener('click', () => {
-        resolveDuplicate('separate');
-    });
+    if (dom.dupKeepExisting) {
+        dom.dupKeepExisting.addEventListener('click', () => {
+            resolveDuplicate('keep');
+        });
+    }
+    if (dom.dupUseUploaded) {
+        dom.dupUseUploaded.addEventListener('click', () => {
+            resolveDuplicate('overwrite');
+        });
+    }
+    if (dom.dupAddSeparate) {
+        dom.dupAddSeparate.addEventListener('click', () => {
+            resolveDuplicate('separate');
+        });
+    }
 }
+
 
 // Handle File upload validations
 function handleFileSelection(file) {
@@ -3654,16 +3738,18 @@ function initDashboardSearch() {
 function checkServiceAvailability() {
     fetch('/')
     .then(res => {
-        if (res.ok) {
-            document.getElementById('service-offline-notice').classList.remove('visible');
-        } else {
-            document.getElementById('service-offline-notice').classList.add('visible');
+        const el = document.getElementById('service-offline-notice');
+        if (el) {
+            if (res.ok) el.classList.remove('visible');
+            else el.classList.add('visible');
         }
     })
     .catch(() => {
-        document.getElementById('service-offline-notice').classList.add('visible');
+        const el = document.getElementById('service-offline-notice');
+        if (el) el.classList.add('visible');
     });
 }
+
 
 // Keyboard Modals Closure
 function initAccessibilityKeys() {
@@ -3683,14 +3769,7 @@ function initAccessibilityKeys() {
     });
 }
 
-// Auto Init on Page Load
-document.addEventListener('DOMContentLoaded', () => {
-    initMobileMenu();
-    initGradeRulesTabs();
-    initDashboardSearch();
-    initAccessibilityKeys();
-    checkServiceAvailability();
-});
+
 
 
 // Toggle Calculator mode columns and headers
@@ -5146,8 +5225,6 @@ window.initHistorySystem = function() {
         });
     }
 };
-
-let stateProfileHistory = [];
 
 // Fetch user student profiles and their nested calculations from database
 window.loadHistoryFromDb = async function() {
