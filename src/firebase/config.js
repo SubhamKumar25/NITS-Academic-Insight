@@ -32,7 +32,8 @@ import {
     updateDoc,
     query,
     where,
-    orderBy
+    orderBy,
+    onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 // Internal instances (set after initializeFirebase is called)
@@ -81,5 +82,7 @@ export {
     updateDoc,
     query,
     where,
-    orderBy
+    orderBy,
+    onSnapshot
 };
+

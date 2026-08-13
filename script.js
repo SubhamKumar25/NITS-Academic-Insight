@@ -31,8 +31,10 @@ import {
     updateDoc,
     query,
     where,
-    orderBy
+    orderBy,
+    onSnapshot
 } from './src/firebase/config.js';
+
 
 // Application State
 const state = {
@@ -3983,6 +3985,96 @@ function hideLoadingOverlay() {
     }
 }
 
+let unsubscribeProfilesListener = null;
+
+function setupRealtimeDatabaseSync(uid) {
+    if (unsubscribeProfilesListener) {
+        unsubscribeProfilesListener();
+        unsubscribeProfilesListener = null;
+    }
+
+    if (!uid || state.auth.mode !== 'firebase') return;
+
+    const db = getFirebaseDb();
+    if (!db) return;
+
+    try {
+        const profCol = collection(db, "users", uid, "resultProfiles");
+        unsubscribeProfilesListener = onSnapshot(profCol, async (profSnap) => {
+            try {
+                const profilesList = [];
+                for (const profDoc of profSnap.docs) {
+                    const profData = profDoc.data();
+                    const calcSnap = await getDocs(query(collection(db, "users", uid, "resultProfiles", profDoc.id, "calculations"), orderBy("updatedAt", "desc")));
+                    
+                    const calculations = [];
+                    calcSnap.forEach(cDoc => {
+                        calculations.push({
+                            calculationId: cDoc.id,
+                            ...cDoc.data()
+                        });
+                    });
+
+                    profilesList.push({
+                        profileId: profDoc.id,
+                        ...profData,
+                        studentName: profData.studentName || 'Rohit',
+                        program: profData.program || 'mtech',
+                        department: profData.department || 'cse',
+                        calculations
+                    });
+                }
+
+                // BACKWARD COMPATIBILITY: Legacy history support
+                try {
+                    const legacySnap = await getDocs(query(collection(db, "users", uid, "history"), orderBy("createdAt", "desc")));
+                    if (!legacySnap.empty) {
+                        const legacyCalcs = [];
+                        legacySnap.forEach(lDoc => {
+                            const d = lDoc.data();
+                            legacyCalcs.push({
+                                calculationId: lDoc.id,
+                                profileId: 'legacy_prof',
+                                resultNickname: d.nickname || 'Legacy Result',
+                                program: d.program || 'mtech',
+                                department: d.department || 'cse',
+                                semesters: d.semesters,
+                                summary: d.summary,
+                                calculationMethod: d.calculationMethod,
+                                createdAt: d.createdAt,
+                                updatedAt: d.updatedAt,
+                                isLegacy: true
+                            });
+                        });
+                        if (legacyCalcs.length > 0) {
+                            profilesList.push({
+                                profileId: 'legacy_prof',
+                                studentName: 'Saved Snapshots (Legacy)',
+                                program: 'mtech',
+                                department: 'cse',
+                                calculations: legacyCalcs
+                            });
+                        }
+                    }
+                } catch (e) {}
+
+                stateProfileHistory = profilesList;
+                renderHistoryList();
+                if (state.activeTab === 'analysis') {
+                    renderAnalysis();
+                }
+            } catch (err) {
+                console.error("Error processing real-time profiles update:", err);
+            }
+        }, (error) => {
+            console.error("Real-time database sync listener error:", error);
+            showToast("Database sync error: " + error.message, "warning");
+        });
+    } catch (err) {
+        console.error("Failed to attach real-time database listener:", err);
+    }
+}
+
 function handleAuthState(user) {
     state.auth.loading = false;
     state.auth.user = user;
@@ -4041,8 +4133,23 @@ function handleAuthState(user) {
         if (dropdownEmailEl) dropdownEmailEl.textContent = user.email || '';
         
         initCurrentResultFromDraft(user.uid);
+        setupRealtimeDatabaseSync(user.uid);
         loadHistoryFromDb();
     } else {
+        // Clean up real-time listener and clear memory on logout
+        if (unsubscribeProfilesListener) {
+            unsubscribeProfilesListener();
+            unsubscribeProfilesListener = null;
+        }
+
+        stateProfileHistory = [];
+        state.currentProfile = { profileId: null, studentName: 'Rohit', program: 'mtech', department: 'cse' };
+        state.currentCalculation = { calculationId: null, resultNickname: 'Current Result', isDirty: false, mode: 'normal', situation: 'normal' };
+        ['sem1', 'sem2', 'sem3', 'sem4'].forEach(s => { state.semesters[s] = []; });
+
+        renderHistoryList();
+        renderAnalysis();
+
         if (dom.appContainer) dom.appContainer.style.display = 'none';
         if (dom.authContainer) dom.authContainer.style.display = 'block';
         
@@ -4076,6 +4183,7 @@ function handleAuthState(user) {
             avatarEl.style.padding = '';
         }
         if (dropdownAvatarEl) {
+
             dropdownAvatarEl.innerHTML = 'U';
             dropdownAvatarEl.style.padding = '';
         }
@@ -5132,20 +5240,24 @@ window.loadHistoryFromDb = async function() {
 // Delete a calculation inside a profile
 async function deleteCalculationRecord(profileId, calculationId) {
     const uid = state.auth.user ? state.auth.user.uid : null;
-    if (!uid) return;
+    if (!uid) {
+        showToast("You must be logged in to delete calculations.", "error");
+        return;
+    }
     
-    showConfirmModal("Delete this calculation? This will permanently remove this saved calculation record.", async () => {
+    showConfirmModal("Delete this calculation? This exact result will be permanently removed from the database.", async () => {
+        showToast("Deleting calculation from database...", "info");
         try {
             if (state.auth.mode === 'firebase') {
                 const db = getFirebaseDb();
-                if (db) {
-                    if (profileId === 'legacy_prof') {
-                        await deleteDoc(doc(db, "users", uid, "history", calculationId));
-                    } else {
-                        await deleteDoc(doc(db, "users", uid, "resultProfiles", profileId, "calculations", calculationId));
-                    }
-                    showToast("Calculation deleted.", "success");
+                if (!db) throw new Error("Database service unavailable.");
+
+                if (profileId === 'legacy_prof') {
+                    await deleteDoc(doc(db, "users", uid, "history", calculationId));
+                } else {
+                    await deleteDoc(doc(db, "users", uid, "resultProfiles", profileId, "calculations", calculationId));
                 }
+                showToast("Calculation deleted successfully from database.", "success");
             } else {
                 let mockProfiles = JSON.parse(localStorage.getItem(`nits_mock_result_profiles_${uid}`) || '[]');
                 const prof = mockProfiles.find(p => p.profileId === profileId);
@@ -5157,29 +5269,36 @@ async function deleteCalculationRecord(profileId, calculationId) {
             }
             await loadHistoryFromDb();
         } catch (err) {
-            console.error("Error deleting calculation record:", err);
-            showToast("Failed to delete calculation: " + err.message, "error");
+            console.error("Error deleting calculation record from database:", err);
+            showToast("Could not delete calculation: " + err.message, "error");
         }
     });
 }
 
-// Delete an entire student profile and all its calculations
+// Delete an entire student profile and all its calculations (Cascading Delete)
 async function deleteProfileRecord(profileId, studentName) {
     const uid = state.auth.user ? state.auth.user.uid : null;
-    if (!uid) return;
+    if (!uid) {
+        showToast("You must be logged in to delete profiles.", "error");
+        return;
+    }
 
-    showConfirmModal(`Delete profile "${studentName}" and all of its calculation records?`, async () => {
+    showConfirmModal(`Delete profile "${studentName}" and ALL of its associated calculation records from the database?`, async () => {
+        showToast(`Deleting profile "${studentName}" and all associated results...`, "info");
         try {
             if (state.auth.mode === 'firebase') {
                 const db = getFirebaseDb();
-                if (db && profileId !== 'legacy_prof') {
-                    // Delete nested calculations
+                if (!db) throw new Error("Database service unavailable.");
+
+                if (profileId !== 'legacy_prof') {
+                    // Cascading Delete: Delete all subcollection calculation documents first
                     const calcSnap = await getDocs(collection(db, "users", uid, "resultProfiles", profileId, "calculations"));
                     for (const cDoc of calcSnap.docs) {
                         await deleteDoc(doc(db, "users", uid, "resultProfiles", profileId, "calculations", cDoc.id));
                     }
+                    // Delete parent Profile document
                     await deleteDoc(doc(db, "users", uid, "resultProfiles", profileId));
-                    showToast(`Profile "${studentName}" deleted.`, "success");
+                    showToast(`Profile "${studentName}" and all results permanently deleted from database.`, "success");
                 }
             } else {
                 let mockProfiles = JSON.parse(localStorage.getItem(`nits_mock_result_profiles_${uid}`) || '[]');
@@ -5189,11 +5308,12 @@ async function deleteProfileRecord(profileId, studentName) {
             }
             await loadHistoryFromDb();
         } catch (err) {
-            console.error("Error deleting profile record:", err);
-            showToast("Failed to delete profile: " + err.message, "error");
+            console.error("Error deleting profile record from database:", err);
+            showToast("Could not delete profile: " + err.message, "error");
         }
     });
 }
+
 
 // Edit Student Profile Name
 async function renameProfileRecord(profileId, currentName) {
