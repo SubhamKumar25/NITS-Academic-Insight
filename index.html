@@ -279,7 +279,7 @@
                 <div class="calculator-card">
                     <div class="calculator-card-header">
                         <div>
-                            <h2>Manual Result Calculator</h2>
+                            <h2>Manual Result Calculator <span id="auto-save-status" style="font-size: 0.78rem; color: var(--muted); font-weight: normal; margin-left: 12px; display: inline-block;"></span></h2>
                             <span class="card-subtitle">Enter course details and grades to calculate your semester performance.</span>
                         </div>
                     </div>
@@ -293,6 +293,43 @@
                     <div class="mode-helper-box">
                         <p id="grade-method-desc" style="display:block;">Use this mode when your grade card already gives letter grades.</p>
                         <p id="marks-method-desc" style="display:none;">Enter marks only when you need the calculator to determine the grade. Marks are normalized to 100 according to the NIT Silchar M.Tech grading rules.</p>
+                    </div>
+
+                    <!-- Student Information & Program Details -->
+                    <div class="student-info-section" style="background:var(--neutral-light); border: 1px solid var(--border); padding: 16px; border-radius: var(--r-md); margin-bottom: 20px;">
+                        <h3 style="margin: 0 0 12px 0; font-size: 0.9rem; font-weight: 700; color: var(--text-main);">Student &amp; Program Details</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Result Nickname / Name *</label>
+                                <input type="text" id="calc-result-nickname" class="dash-search-input" placeholder="e.g. My M.Tech Result" value="My M.Tech Result" style="min-height: 34px;">
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Student Name</label>
+                                <input type="text" id="calc-student-name" class="dash-search-input" placeholder="e.g. Rahul Kumar" value="" style="min-height: 34px;">
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Student ID / Roll Number</label>
+                                <input type="text" id="calc-student-roll" class="dash-search-input" placeholder="e.g. 2314056" value="" style="min-height: 34px;">
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Department</label>
+                                <select id="calc-department-select" class="select-type" style="width:100%; min-height: 34px;">
+                                    <option value="">Select Department</option>
+                                    <option value="cse">Computer Science and Engineering</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Specialization / Program</label>
+                                <select id="calc-specialization-select" class="select-type" style="width:100%; min-height: 34px;">
+                                    <option value="">Select Specialization</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin-bottom:0; display: flex; align-items: flex-end; padding-bottom: 6px;">
+                                <label class="checkbox-label" style="font-size: 0.8rem; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                    <input type="checkbox" id="calc-lock-structure" checked style="width:16px; height:16px;"> Lock Predefined Courses
+                                </label>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="advanced-toggle-bar">
@@ -448,7 +485,7 @@
                     <div class="summary-table-container">
                         <div class="empty-state-small" id="summary-empty-message">No semester results available yet. Add courses in the calculator to populate.</div>
                         <table class="summary-table" style="display:none;">
-                            <thead><tr><th>Semester</th><th>Credits</th><th>SGPA</th><th>Backlogs</th><th>Status</th></tr></thead>
+                            <thead><tr><th>Semester</th><th>Credits</th><th>SGPA</th><th>CGPA</th><th>Backlogs</th><th>Status</th></tr></thead>
                             <tbody id="summary-rows-container"></tbody>
                         </table>
                     </div>
@@ -591,6 +628,7 @@
                             <div style="background:var(--background); border:1px solid var(--border); padding:14px; border-radius:var(--r-md);">
                                 <h4 style="margin:0 0 8px 0; font-size:0.75rem; text-transform:uppercase; color:var(--muted); font-weight:700;">Calculated Metrics Summary</h4>
                                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="font-size:0.8rem; color:var(--muted);">Calculated SGPA:</span><strong id="analyzer-calc-sgpa" style="color:var(--primary); font-size:1.05rem;">&mdash;</strong></div>
+                                <div id="analyzer-calc-cgpa-row" style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="font-size:0.8rem; color:var(--muted);">Cumulative CGPA:</span><strong id="analyzer-calc-cgpa" style="color:var(--primary); font-size:1.05rem;">&mdash;</strong></div>
                                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="font-size:0.8rem; color:var(--muted);">Total Credits Earned:</span><strong id="analyzer-calc-credits">&mdash;</strong></div>
                                 <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="font-size:0.8rem; color:var(--muted);">Passed / Failed Courses:</span><span style="font-size:0.8rem;"><strong id="analyzer-calc-passed" style="color:var(--success);">0</strong> / <strong id="analyzer-calc-failed" style="color:var(--danger);">0</strong></span></div>
                             </div>
@@ -997,6 +1035,19 @@
                 <div class="form-group" style="margin-bottom:4px;">
                     <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Roll Number / Student ID (Optional)</label>
                     <input type="text" id="new-profile-roll" class="dash-search-input" placeholder="e.g. 2314056">
+                </div>
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Department</label>
+                    <select id="new-profile-dept" class="select-type" style="width:100%; min-height: 34px;">
+                        <option value="">Select Department</option>
+                        <option value="cse">Computer Science and Engineering</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom:4px;">
+                    <label style="font-weight:600; font-size:0.75rem; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;">Specialization</label>
+                    <select id="new-profile-spec" class="select-type" style="width:100%; min-height: 34px;">
+                        <option value="">Select Specialization</option>
+                    </select>
                 </div>
             </div>
             <div class="modal-footer" style="padding:8px 20px;">

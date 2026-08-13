@@ -111,6 +111,43 @@ const GRADE_POINT_MAPPING = {
     'I': 0
 };
 
+// Predefined departments & programs course configuration
+const DEPARTMENTS = {
+    "cse": {
+        name: "Computer Science and Engineering",
+        specializations: {
+            "cse": {
+                name: "Computer Science and Engineering",
+                courses: {
+                    sem1: [
+                        { code: "CS5101", subject: "Foundations of Computing Science", credits: 3, courseType: "Theory" },
+                        { code: "CS5102", subject: "Advanced Algorithms & Data Structure", credits: 3, courseType: "Theory" },
+                        { code: "CS5103", subject: "Linear Optimization", credits: 3, courseType: "Theory" },
+                        { code: "CS5137", subject: "Machine Learning", credits: 3, courseType: "Theory" },
+                        { code: "CS5104", subject: "Computer Systems Lab-I", credits: 2, courseType: "Other" },
+                        { code: "CS5105", subject: "Seminar-I", credits: 2, courseType: "Other" }
+                    ],
+                    sem2: [
+                        { code: "CS5106", subject: "Advanced Database Management System", credits: 3, courseType: "Theory" },
+                        { code: "CS5107", subject: "High Performance Computing", credits: 3, courseType: "Theory" },
+                        { code: "CS5108", subject: "Internet Protocol", credits: 4, courseType: "Theory" },
+                        { code: "CS5109", subject: "Artificial Intelligence", credits: 3, courseType: "Theory" },
+                        { code: "CS5141", subject: "Complex Networks", credits: 3, courseType: "Theory" },
+                        { code: "CS5110", subject: "Computer Systems Lab-II", credits: 2, courseType: "Other" },
+                        { code: "CS5111", subject: "Extra Academic Activity - YOGA", credits: 0, courseType: "Other" }
+                    ],
+                    sem3: [
+                        { code: "CS5198", subject: "Project Phase-I", credits: 12, courseType: "Other" }
+                    ],
+                    sem4: [
+                        { code: "CS5199", subject: "Project Phase-II", credits: 18, courseType: "Other" }
+                    ]
+                }
+            }
+        }
+    }
+};
+
 // DOM Cache
 const dom = {
     subjectRowsContainer: document.getElementById('subject-rows-container'),
@@ -282,7 +319,14 @@ const dom = {
     editHistVersionDisplay: document.getElementById('edit-hist-version-display'),
     btnCancelEditHistory: document.getElementById('btn-cancel-edit-history'),
     btnSaveAsNewHistory: document.getElementById('btn-save-as-new-history'),
-    btnSaveChangesHistory: document.getElementById('btn-save-changes-history')
+    btnSaveChangesHistory: document.getElementById('btn-save-changes-history'),
+    calcResultNickname: document.getElementById('calc-result-nickname'),
+    calcStudentName: document.getElementById('calc-student-name'),
+    calcStudentRoll: document.getElementById('calc-student-roll'),
+    calcDepartmentSelect: document.getElementById('calc-department-select'),
+    calcSpecializationSelect: document.getElementById('calc-specialization-select'),
+    calcLockStructure: document.getElementById('calc-lock-structure'),
+    autoSaveStatus: document.getElementById('auto-save-status')
 };
 
 // Initial setup
@@ -365,6 +409,39 @@ function initEventListeners() {
     dom.printAnalysisBtn.addEventListener('click', () => {
         window.print();
     });
+
+    // Student Information & Program Details event listeners
+    if (dom.calcDepartmentSelect) {
+        dom.calcDepartmentSelect.addEventListener('change', () => {
+            populateSpecializations();
+            applyPredefinedCourses();
+            calculateAndRefresh();
+            render();
+            triggerAutoSave();
+        });
+    }
+    if (dom.calcSpecializationSelect) {
+        dom.calcSpecializationSelect.addEventListener('change', () => {
+            applyPredefinedCourses();
+            calculateAndRefresh();
+            render();
+            triggerAutoSave();
+        });
+    }
+    if (dom.calcLockStructure) {
+        dom.calcLockStructure.addEventListener('change', () => {
+            renderSubjectRows();
+            triggerAutoSave();
+        });
+    }
+    
+    [dom.calcResultNickname, dom.calcStudentName, dom.calcStudentRoll].forEach(input => {
+        if (input) {
+            input.addEventListener('input', () => {
+                triggerAutoSave();
+            });
+        }
+    });
 }
 
 // -------------------------------------------------------------
@@ -392,35 +469,44 @@ function renderSubjectRows() {
     dom.semOverviewPanel.style.display = 'block';
 
     const isGradeMode = state.calculationMethod === 'grade';
+    const lockStructure = dom.calcLockStructure?.checked ?? true;
+    const predefinedCourses = getPredefinedCoursesForActiveSemester();
 
     courses.forEach(course => {
         const tr = document.createElement('tr');
         tr.setAttribute('data-id', course.id);
         tr.style.cursor = 'pointer';
 
+        const isPredefined = predefinedCourses.some(pre => pre.code.toUpperCase() === course.code.toUpperCase());
+        const readonlyAttr = (lockStructure && isPredefined) ? 'readonly style="background-color: var(--neutral-light); cursor: not-allowed;"' : '';
+        const disabledAttr = (lockStructure && isPredefined) ? 'disabled style="background-color: var(--neutral-light); cursor: not-allowed;"' : '';
+        const removeBtnHtml = (lockStructure && isPredefined)
+            ? `<button type="button" class="btn-remove" style="visibility: hidden; pointer-events: none;">&times;</button>`
+            : `<button type="button" class="btn-remove" aria-label="Remove subject">&times;</button>`;
+
         if (isGradeMode) {
             tr.innerHTML = `
                 <td data-label="Course" class="course-cell">
-                    <input type="text" class="input-code" placeholder="Course Code" value="${course.code}">
+                    <input type="text" class="input-code" placeholder="Course Code" value="${course.code}" ${readonlyAttr}>
                 </td>
                 <td data-label="Subject" class="subject-cell">
-                    <input type="text" class="input-subject" placeholder="Subject Name" value="${course.subject || ''}">
+                    <input type="text" class="input-subject" placeholder="Subject Name" value="${course.subject || ''}" ${readonlyAttr}>
                 </td>
                 <td data-label="Type" class="type-cell">
-                    <select class="select-type">
+                    <select class="select-type" ${disabledAttr}>
                         <option value="">Select Type</option>
                         <option value="Theory" ${course.courseType === 'Theory' ? 'selected' : ''}>Theory</option>
                         <option value="Other" ${course.courseType === 'Other' ? 'selected' : ''}>Other than Theory</option>
                     </select>
                 </td>
                 <td data-label="Obtained" class="obtained-cell">
-                    <input type="number" step="any" class="input-marks input-obtained" placeholder="Obt" value="${course.obtainedMarks === null ? '' : course.obtainedMarks}">
+                    <input type="number" step="any" class="input-marks input-obtained" placeholder="Obt" value="${course.obtainedMarks === null ? '' : course.obtainedMarks}" ${readonlyAttr}>
                 </td>
                 <td data-label="Max" class="max-cell">
-                    <input type="number" step="any" class="input-marks input-max" placeholder="Max" value="${course.maximumMarks === null ? '' : course.maximumMarks}">
+                    <input type="number" step="any" class="input-marks input-max" placeholder="Max" value="${course.maximumMarks === null ? '' : course.maximumMarks}" ${readonlyAttr}>
                 </td>
                 <td data-label="Credits" class="credits-cell">
-                    <input type="number" step="any" class="input-credits" placeholder="Cr" value="${course.credits === null ? '' : course.credits}">
+                    <input type="number" step="any" class="input-credits" placeholder="Cr" value="${course.credits === null ? '' : course.credits}" ${readonlyAttr}>
                 </td>
                 <td data-label="Grade" class="grade-cell">
                     <select class="select-grade">
@@ -445,19 +531,19 @@ function renderSubjectRows() {
                 <td data-label="GP" class="gp-cell grade-point-display">—</td>
                 <td data-label="Status" class="status-cell" style="text-align: center;"><span class="status-text">Incomplete</span></td>
                 <td data-label="Action" class="remove-cell" style="text-align: center;">
-                    <button type="button" class="btn-remove" aria-label="Remove subject">&times;</button>
+                    ${removeBtnHtml}
                 </td>
             `;
         } else {
             tr.innerHTML = `
                 <td data-label="Course" class="course-cell">
-                    <input type="text" class="input-code" placeholder="Course Code" value="${course.code}">
+                    <input type="text" class="input-code" placeholder="Course Code" value="${course.code}" ${readonlyAttr}>
                 </td>
                 <td data-label="Subject" class="subject-cell">
-                    <input type="text" class="input-subject" placeholder="Subject Name" value="${course.subject || ''}">
+                    <input type="text" class="input-subject" placeholder="Subject Name" value="${course.subject || ''}" ${readonlyAttr}>
                 </td>
                 <td data-label="Type" class="type-cell">
-                    <select class="select-type">
+                    <select class="select-type" ${disabledAttr}>
                         <option value="">Select Course Type</option>
                         <option value="Theory" ${course.courseType === 'Theory' ? 'selected' : ''}>Theory</option>
                         <option value="Other" ${course.courseType === 'Other' ? 'selected' : ''}>Other than Theory</option>
@@ -470,7 +556,7 @@ function renderSubjectRows() {
                     <input type="number" step="any" class="input-marks input-max" placeholder="Max" value="${course.maximumMarks === null ? '' : course.maximumMarks}">
                 </td>
                 <td data-label="Credits" class="credits-cell">
-                    <input type="number" step="any" class="input-credits" placeholder="Credits" value="${course.credits === null ? '' : course.credits}">
+                    <input type="number" step="any" class="input-credits" placeholder="Credits" value="${course.credits === null ? '' : course.credits}" ${readonlyAttr}>
                 </td>
                 <td data-label="Grade" class="grade-cell">
                     <select class="select-grade" ${course.gradeSource === 'Calculated from Marks' ? 'disabled' : ''}>
@@ -495,7 +581,7 @@ function renderSubjectRows() {
                 <td data-label="GP" class="gp-cell grade-point-display">—</td>
                 <td data-label="Status" class="status-cell" style="text-align: center;"><span class="status-text">Incomplete</span></td>
                 <td data-label="Action" class="remove-cell" style="text-align: center;">
-                    <button type="button" class="btn-remove">&times;</button>
+                    ${removeBtnHtml}
                 </td>
             `;
         }
@@ -1113,32 +1199,48 @@ function updateOverallCards(overallData, currentSemData) {
         dom.currentSgpaPct.textContent = '—';
     }
 
+    // Cumulative CGPA up to active semester
+    const activeSemNum = parseInt(state.activeSemester.replace('sem', ''));
+    const semsUpToActive = [];
+    for (let k = 1; k <= activeSemNum; k++) {
+        semsUpToActive.push('sem' + k);
+    }
+    const cumulativeActiveData = calculateCombined(semsUpToActive);
+
     // Overall CGPA Card
-    if (overallData.cgpa !== null) {
-        dom.cardOverallCgpa.textContent = overallData.cgpa.toFixed(2);
-        if (state.importedDocCgpa !== null && state.importedDocCgpa !== undefined && !isNaN(state.importedDocCgpa)) {
-            const isMatch = Math.abs(state.importedDocCgpa - overallData.cgpa) < 0.005;
-            const matchText = isMatch ? '✓ Matches document' : `⚠ Does not match document (Doc: ${state.importedDocCgpa.toFixed(2)})`;
-            dom.overallCgpaPct.textContent = `${overallData.percentage.toFixed(2)}% | ${matchText}`;
-        } else {
-            dom.overallCgpaPct.textContent = overallData.percentage.toFixed(2) + '%';
+    if (state.activeSemester === 'sem1') {
+        dom.cardOverallCgpa.textContent = '—';
+        dom.overallCgpaPct.textContent = 'N/A (Sem 1)';
+        if (dom.cardPercentage) {
+            dom.cardPercentage.textContent = '—';
         }
     } else {
-        dom.cardOverallCgpa.textContent = '—';
-        dom.overallCgpaPct.textContent = '—';
+        if (cumulativeActiveData.cgpa !== null) {
+            dom.cardOverallCgpa.textContent = cumulativeActiveData.cgpa.toFixed(2);
+            if (state.importedDocCgpa !== null && state.importedDocCgpa !== undefined && !isNaN(state.importedDocCgpa)) {
+                const isMatch = Math.abs(state.importedDocCgpa - cumulativeActiveData.cgpa) < 0.005;
+                const matchText = isMatch ? '✓ Matches document' : `⚠ Does not match document (Doc: ${state.importedDocCgpa.toFixed(2)})`;
+                dom.overallCgpaPct.textContent = `${cumulativeActiveData.percentage.toFixed(2)}% | ${matchText}`;
+            } else {
+                dom.overallCgpaPct.textContent = cumulativeActiveData.percentage.toFixed(2) + '%';
+            }
+        } else {
+            dom.cardOverallCgpa.textContent = '—';
+            dom.overallCgpaPct.textContent = '—';
+        }
+
+        // Percentage Card (new top-row card)
+        if (dom.cardPercentage) {
+            dom.cardPercentage.textContent = cumulativeActiveData.percentage !== null 
+                ? cumulativeActiveData.percentage.toFixed(2) + '%' 
+                : '—';
+        }
     }
 
     // Total Credits Card (Across all entered semesters)
     dom.cardTotalCredits.textContent = overallData.totalCredits > 0 
         ? (overallData.totalCredits % 1 === 0 ? overallData.totalCredits : overallData.totalCredits.toFixed(2)) 
         : '—';
-
-    // Percentage Card (new top-row card)
-    if (dom.cardPercentage) {
-        dom.cardPercentage.textContent = overallData.percentage !== null 
-            ? overallData.percentage.toFixed(2) + '%' 
-            : '—';
-    }
 
     // Gather raw courses list and resolved list
     const rawCourses = [];
@@ -1250,6 +1352,20 @@ function renderSemesterSummaryTable() {
             const tdSgpa = document.createElement('td');
             tdSgpa.textContent = semData.sgpa !== null ? semData.sgpa.toFixed(2) : '—';
             tr.appendChild(tdSgpa);
+
+            // CGPA
+            const tdCgpa = document.createElement('td');
+            if (i === 1) {
+                tdCgpa.textContent = '—';
+            } else {
+                const semsUpToI = [];
+                for (let k = 1; k <= i; k++) {
+                    semsUpToI.push('sem' + k);
+                }
+                const cumulative = calculateCombined(semsUpToI);
+                tdCgpa.textContent = cumulative.cgpa !== null ? cumulative.cgpa.toFixed(2) : '—';
+            }
+            tr.appendChild(tdCgpa);
 
             // Backlogs
             const tdBack = document.createElement('td');
@@ -3787,8 +3903,7 @@ function handleAuthState(user) {
         if (dropdownNameEl) dropdownNameEl.textContent = displayName;
         if (dropdownEmailEl) dropdownEmailEl.textContent = user.email || '';
         
-        loadUserDataFromStorage(user.uid);
-        calculateAndRefresh();
+        loadProfilesFromDb();
         loadHistoryFromDb();
     } else {
         if (dom.appContainer) dom.appContainer.style.display = 'none';
@@ -3832,8 +3947,201 @@ function handleAuthState(user) {
     }
 }
 
+function populateSpecializations() {
+    const deptSelect = document.getElementById('calc-department-select');
+    const specSelect = document.getElementById('calc-specialization-select');
+    if (!deptSelect || !specSelect) return;
+
+    const deptVal = deptSelect.value;
+    specSelect.innerHTML = '<option value="">Select Specialization</option>';
+
+    if (deptVal && DEPARTMENTS[deptVal]) {
+        const specs = DEPARTMENTS[deptVal].specializations;
+        Object.keys(specs).forEach(key => {
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = specs[key].name;
+            specSelect.appendChild(opt);
+        });
+    }
+}
+
+function getPredefinedCoursesForActiveSemester() {
+    const deptSelect = document.getElementById('calc-department-select');
+    const specSelect = document.getElementById('calc-specialization-select');
+    if (!deptSelect || !specSelect) return [];
+
+    const deptVal = deptSelect.value;
+    const specVal = specSelect.value;
+    if (!deptVal || !specVal) return [];
+
+    const dept = DEPARTMENTS[deptVal];
+    const spec = dept?.specializations[specVal];
+    if (!spec) return [];
+
+    return spec.courses[state.activeSemester] || [];
+}
+
+function applyPredefinedCourses() {
+    const deptSelect = document.getElementById('calc-department-select');
+    const specSelect = document.getElementById('calc-specialization-select');
+    if (!deptSelect || !specSelect) return;
+
+    const deptVal = deptSelect.value;
+    const specVal = specSelect.value;
+    if (!deptVal || !specVal) return;
+
+    const dept = DEPARTMENTS[deptVal];
+    const spec = dept?.specializations[specVal];
+    if (!spec) return;
+
+    const structure = spec.courses;
+    
+    ['sem1', 'sem2', 'sem3', 'sem4'].forEach(semKey => {
+        const predefinedList = structure[semKey] || [];
+        const currentList = state.semesters[semKey] || [];
+        
+        const mergedList = predefinedList.map(pre => {
+            const existing = currentList.find(c => c.code.toUpperCase() === pre.code.toUpperCase());
+            return {
+                id: existing ? existing.id : 'course_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
+                code: pre.code,
+                subject: pre.subject,
+                courseType: pre.courseType,
+                credits: pre.credits,
+                grade: existing ? existing.grade : '',
+                gradeSource: existing ? existing.gradeSource : '',
+                manualGrade: existing ? existing.manualGrade : '',
+                attemptType: existing ? existing.attemptType : 'original',
+                obtainedMarks: existing ? existing.obtainedMarks : null,
+                maximumMarks: existing ? existing.maximumMarks : null,
+                source: existing ? existing.source : 'manual'
+            };
+        });
+        
+        currentList.forEach(c => {
+            const isPredefined = predefinedList.some(pre => pre.code.toUpperCase() === c.code.toUpperCase());
+            if (!isPredefined) {
+                mergedList.push(c);
+            }
+        });
+        
+        state.semesters[semKey] = mergedList;
+    });
+}
+
+let autoSaveTimeout = null;
+
+function triggerAutoSave() {
+    const statusEl = document.getElementById('auto-save-status');
+    if (statusEl) {
+        statusEl.textContent = 'Saving...';
+        statusEl.style.color = 'var(--muted)';
+    }
+
+    if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+    autoSaveTimeout = setTimeout(() => {
+        const uid = state.auth.user ? state.auth.user.uid : null;
+        if (!uid) {
+            if (statusEl) statusEl.textContent = '';
+            return;
+        }
+
+        const profileId = state.activeProfileId || 'prof_default';
+        const payload = {
+            resultId: profileId,
+            resultNickname: document.getElementById('calc-result-nickname')?.value || 'My M.Tech Result',
+            studentName: document.getElementById('calc-student-name')?.value || '',
+            rollNumber: document.getElementById('calc-student-roll')?.value || '',
+            department: document.getElementById('calc-department-select')?.value || '',
+            specialization: document.getElementById('calc-specialization-select')?.value || '',
+            semesters: state.semesters,
+            selectedSemesters: state.selectedSemesters,
+            isNonStandardPath: state.isNonStandardPath,
+            periods: state.periods,
+            projectTimeline: state.projectTimeline,
+            updatedAt: new Date().toISOString()
+        };
+
+        localStorage.setItem(`nits_semesters_${uid}_${profileId}`, JSON.stringify(payload));
+
+        const activeProfile = state.profiles.find(p => p.id === profileId);
+        if (activeProfile) {
+            activeProfile.nickname = payload.resultNickname;
+            activeProfile.studentName = payload.studentName;
+            activeProfile.rollNumber = payload.rollNumber;
+            activeProfile.department = payload.department;
+            activeProfile.specialization = payload.specialization;
+            saveProfileToStorage();
+            populateProfileSelect();
+        }
+
+        if (state.auth.mode === 'firebase') {
+            const db = getFirebaseDb();
+            if (db) {
+                const profileDocRef = doc(db, 'users', uid, 'profiles', profileId);
+                const calcStateDocRef = doc(db, 'users', uid, 'academicData', profileId);
+                
+                Promise.all([
+                    setDoc(profileDocRef, {
+                        id: profileId,
+                        nickname: payload.resultNickname,
+                        studentName: payload.studentName,
+                        rollNumber: payload.rollNumber,
+                        department: payload.department,
+                        specialization: payload.specialization,
+                        updatedAt: serverTimestamp()
+                    }),
+                    setDoc(calcStateDocRef, {
+                        ...payload,
+                        updatedAt: serverTimestamp()
+                    })
+                ])
+                .then(() => {
+                    if (statusEl) {
+                        statusEl.textContent = 'Saved to Cloud';
+                        statusEl.style.color = 'var(--success)';
+                    }
+                })
+                .catch(err => {
+                    console.error("Auto-save failed:", err);
+                    if (statusEl) {
+                        statusEl.textContent = 'Save failed';
+                        statusEl.style.color = 'var(--danger)';
+                    }
+                });
+            } else {
+                if (statusEl) {
+                    statusEl.textContent = 'Saved (Local)';
+                    statusEl.style.color = 'var(--success)';
+                }
+            }
+        } else {
+            if (statusEl) {
+                statusEl.textContent = 'Saved (Local)';
+                statusEl.style.color = 'var(--success)';
+            }
+        }
+    }, 1000);
+}
+
 function loadUserDataFromStorage(uid) {
-    const savedData = localStorage.getItem(`nits_semesters_${uid}`);
+    const profileId = state.activeProfileId || 'prof_default';
+    const savedData = localStorage.getItem(`nits_semesters_${uid}_${profileId}`);
+    
+    // Find active profile in state.profiles to populate fields
+    const activeProf = state.profiles.find(p => p.id === profileId);
+    if (activeProf) {
+        if (dom.calcResultNickname) dom.calcResultNickname.value = activeProf.nickname || 'My M.Tech Result';
+        if (dom.calcStudentName) dom.calcStudentName.value = activeProf.studentName || '';
+        if (dom.calcStudentRoll) dom.calcStudentRoll.value = activeProf.rollNumber || '';
+        if (dom.calcDepartmentSelect) {
+            dom.calcDepartmentSelect.value = activeProf.department || '';
+            populateSpecializations();
+        }
+        if (dom.calcSpecializationSelect) dom.calcSpecializationSelect.value = activeProf.specialization || '';
+    }
+
     if (savedData) {
         try {
             const parsed = JSON.parse(savedData);
@@ -3862,7 +4170,7 @@ function loadUserDataFromStorage(uid) {
     if (state.auth.mode === 'firebase') {
         const db = getFirebaseDb();
         if (db) {
-            getDoc(doc(db, "users", uid, "academicData", "calculatorState"))
+            getDoc(doc(db, "users", uid, "academicData", profileId))
                 .then(docSnap => {
                     if (docSnap.exists()) {
                         const parsed = docSnap.data();
@@ -3871,37 +4179,39 @@ function loadUserDataFromStorage(uid) {
                         state.isNonStandardPath = parsed.isNonStandardPath || false;
                         state.periods = parsed.periods || state.periods;
                         state.projectTimeline = parsed.projectTimeline || [];
-                        localStorage.setItem(`nits_semesters_${uid}`, JSON.stringify(parsed));
+                        localStorage.setItem(`nits_semesters_${uid}_${profileId}`, JSON.stringify(parsed));
+                        
+                        // Re-sync UI inputs if they changed on cloud
+                        if (dom.calcResultNickname) dom.calcResultNickname.value = parsed.resultNickname || 'My M.Tech Result';
+                        if (dom.calcStudentName) dom.calcStudentName.value = parsed.studentName || '';
+                        if (dom.calcStudentRoll) dom.calcStudentRoll.value = parsed.rollNumber || '';
+                        if (dom.calcDepartmentSelect) {
+                            dom.calcDepartmentSelect.value = parsed.department || '';
+                            populateSpecializations();
+                        }
+                        if (dom.calcSpecializationSelect) dom.calcSpecializationSelect.value = parsed.specialization || '';
+                        
+                        calculateAndRefresh();
+                        render();
+                    } else {
+                        // If no cloud data yet, apply predefined courses if department is selected
+                        applyPredefinedCourses();
                         calculateAndRefresh();
                         render();
                     }
                 })
                 .catch(err => console.error("Firestore sync error loading data:", err));
         }
+    } else {
+        // If not firebase mode, apply predefined courses if department is selected
+        applyPredefinedCourses();
+        calculateAndRefresh();
+        render();
     }
 }
 
 function saveUserDataToStorage() {
-    const uid = state.auth.user ? state.auth.user.uid : null;
-    if (!uid) return;
-    
-    const payload = {
-        semesters: state.semesters,
-        selectedSemesters: state.selectedSemesters,
-        isNonStandardPath: state.isNonStandardPath,
-        periods: state.periods,
-        projectTimeline: state.projectTimeline
-    };
-    
-    localStorage.setItem(`nits_semesters_${uid}`, JSON.stringify(payload));
-    
-    if (state.auth.mode === 'firebase') {
-        const db = getFirebaseDb();
-        if (db) {
-            setDoc(doc(db, "users", uid, "academicData", "calculatorState"), payload)
-                .catch(err => console.error("Firestore sync error saving data:", err));
-        }
-    }
+    triggerAutoSave();
 }
 
 function showAuthView(view) {
@@ -4803,6 +5113,7 @@ function renderHistoryList() {
             <div class="history-card-footer">
                 <span class="history-card-date">Updated: ${updatedDate} | v${record.version || 1}</span>
                 <div class="history-card-actions">
+                    <button type="button" class="history-action-btn load-hist-btn" data-id="${record.id}" style="background-color: var(--primary); color: white;">Load</button>
                     <button type="button" class="history-action-btn view-hist-btn" data-id="${record.id}">View</button>
                     <button type="button" class="history-action-btn edit-hist-btn" data-id="${record.id}">Edit</button>
                     <button type="button" class="history-action-btn report-hist-btn" data-id="${record.id}">Report</button>
@@ -4811,12 +5122,74 @@ function renderHistoryList() {
             </div>
         `;
         
+        div.querySelector('.load-hist-btn').addEventListener('click', () => loadHistoryIntoCalculator(record));
         div.querySelector('.view-hist-btn').addEventListener('click', () => openHistoryDetail(record));
         div.querySelector('.edit-hist-btn').addEventListener('click', () => openHistoryEdit(record));
         div.querySelector('.report-hist-btn').addEventListener('click', () => openHistoryReport(record));
         div.querySelector('.delete-hist-btn').addEventListener('click', () => deleteHistoryRecord(record.id));
         
         container.appendChild(div);
+    });
+}
+
+function loadHistoryIntoCalculator(record) {
+    showConfirmModal(`Do you want to load "${record.nickname || 'this snapshot'}" into the calculator? This will replace your current active calculator results.`, () => {
+        const uid = state.auth.user ? state.auth.user.uid : 'default';
+        
+        // 1. Create or set active profile ID
+        const existingProf = state.profiles.find(p => p.nickname === record.nickname && p.studentName === record.studentName && p.rollNumber === record.studentId);
+        
+        if (existingProf) {
+            state.activeProfileId = existingProf.id;
+        } else {
+            const newProf = {
+                id: 'prof_' + Date.now(),
+                nickname: record.nickname || 'Loaded Result',
+                studentName: record.studentName || '',
+                rollNumber: record.studentId || '',
+                department: record.department || '',
+                specialization: record.specialization || '',
+                createdAt: new Date().toISOString()
+            };
+            state.profiles.push(newProf);
+            state.activeProfileId = newProf.id;
+            saveProfileToStorage();
+            populateProfileSelect();
+        }
+
+        // 2. Load semesters dataset
+        state.semesters = JSON.parse(JSON.stringify(record.semesters));
+        state.selectedSemesters = record.selectedSemesters || { sem1: false, sem2: false, sem3: false, sem4: false };
+        state.isNonStandardPath = record.isNonStandardPath || false;
+        state.periods = record.periods || state.periods;
+        state.projectTimeline = record.projectTimeline || [];
+
+        // 3. Update Inputs
+        if (dom.calcResultNickname) dom.calcResultNickname.value = record.nickname || 'Loaded Result';
+        if (dom.calcStudentName) dom.calcStudentName.value = record.studentName || '';
+        if (dom.calcStudentRoll) dom.calcStudentRoll.value = record.studentId || '';
+        if (dom.calcDepartmentSelect) {
+            dom.calcDepartmentSelect.value = record.department || '';
+            populateSpecializations();
+        }
+        if (dom.calcSpecializationSelect) dom.calcSpecializationSelect.value = record.specialization || '';
+
+        calculateAndRefresh();
+        render();
+        triggerAutoSave();
+
+        // 4. Navigate back to calculator tab
+        const calcTab = document.querySelector('a[href="#calculator"]') || document.querySelector('.site-nav a') || document.querySelector('a[data-tab="calculator"]');
+        if (calcTab) {
+            calcTab.click();
+        } else {
+            const calcSection = document.getElementById('calculator') || document.querySelector('.calculator-section');
+            if (calcSection) {
+                document.querySelectorAll('main section').forEach(sec => sec.style.display = 'none');
+                calcSection.style.display = 'block';
+            }
+        }
+        showToast(`Loaded result: ${record.nickname || 'Loaded Result'}`, "success");
     });
 }
 
@@ -4882,6 +5255,20 @@ function openHistoryDetail(record) {
     
     const savePublicBtn = document.getElementById('btn-hist-detail-save-public');
     if (savePublicBtn) savePublicBtn.remove();
+
+    const loadCalcBtn = document.getElementById('btn-hist-detail-load-calc');
+    if (loadCalcBtn) loadCalcBtn.remove();
+
+    const loadBtn = document.createElement('button');
+    loadBtn.type = 'button';
+    loadBtn.className = 'btn btn-outline-primary btn-sm';
+    loadBtn.id = 'btn-hist-detail-load-calc';
+    loadBtn.textContent = 'Load into Calculator';
+    loadBtn.addEventListener('click', () => {
+        dom.historyDetailModal.style.display = 'none';
+        loadHistoryIntoCalculator(record);
+    });
+    dom.btnHistDetailPdf.parentNode.insertBefore(loadBtn, dom.btnHistDetailCsv);
     
     if (record.isPublicLookup) {
         const saveBtn = document.createElement('button');
@@ -5039,45 +5426,75 @@ function downloadReportPDF(record) {
     doc.text(`Student Name: ${record.studentName || '—'}`, 14, 62);
     doc.text(`Student ID / Roll No: ${record.studentId || '—'}`, 14, 68);
     if (record.nickname) {
-        doc.text(`Nickname (Private): ${record.nickname}`, 14, 74);
+        doc.text(`Result Name: ${record.nickname}`, 14, 74);
     }
+
+    const deptName = record.department ? (DEPARTMENTS[record.department]?.name || record.department) : '—';
+    const specName = record.specialization ? (DEPARTMENTS[record.department]?.specializations[record.specialization]?.name || record.specialization) : '—';
+    doc.text(`Department: ${deptName}`, 110, 62);
+    doc.text(`Specialization: ${specName}`, 110, 68);
     
+    // Determine active semesters with data to calculate cumulative CGPA
+    const semesters = record.semesters || {};
+    const semsWithData = Object.keys(semesters).filter(semKey => (semesters[semKey] || []).length > 0);
+    let maxSemNum = 1;
+    semsWithData.forEach(k => {
+        const num = parseInt(k.replace('sem', ''));
+        if (num > maxSemNum) maxSemNum = num;
+    });
+
+    const semsUpToMax = [];
+    for (let k = 1; k <= maxSemNum; k++) {
+        semsUpToMax.push('sem' + k);
+    }
+
+    // Temporary context swap to use the same logic
+    const originalSemesters = state.semesters;
+    state.semesters = semesters;
+    const cumulativeData = calculateCombined(semsUpToMax);
+    state.semesters = originalSemesters;
+
+    let cgpaText = '—';
+    let pctText = '—';
+    if (maxSemNum > 1 && cumulativeData.cgpa !== null) {
+        cgpaText = cumulativeData.cgpa.toFixed(2);
+        pctText = `${cumulativeData.percentage.toFixed(1)}%`;
+    }
+
     // Summary Metrics Cards
     doc.setFillColor(248, 249, 250);
     doc.rect(14, 82, 182, 26, "F");
     doc.setDrawColor(222, 226, 230);
     doc.rect(14, 82, 182, 26, "S");
     
-    const sum = record.summary || {};
     doc.setFont("helvetica", "bold");
-    doc.text("CGPA", 24, 90);
+    doc.text("CGPA (Cumulative)", 24, 90);
     doc.setFont("helvetica", "normal");
-    doc.text(sum.overallCGPA !== undefined && sum.overallCGPA !== null ? sum.overallCGPA.toFixed(2) : '—', 24, 98);
+    doc.text(cgpaText, 24, 98);
     
     doc.setFont("helvetica", "bold");
     doc.text("Percentage", 74, 90);
     doc.setFont("helvetica", "normal");
-    doc.text(sum.percentage !== undefined && sum.percentage !== null ? `${sum.percentage.toFixed(1)}%` : '—', 74, 98);
+    doc.text(pctText, 74, 98);
     
     doc.setFont("helvetica", "bold");
     doc.text("Credits Earned", 124, 90);
     doc.setFont("helvetica", "normal");
-    doc.text(sum.totalCredits !== undefined && sum.totalCredits !== null ? String(sum.totalCredits) : '—', 124, 98);
+    doc.text(cumulativeData.totalCredits !== undefined && cumulativeData.totalCredits !== null ? String(cumulativeData.totalCredits) : '—', 124, 98);
     
     doc.setFont("helvetica", "bold");
     doc.text("Active Backlogs", 164, 90);
     doc.setFont("helvetica", "normal");
-    doc.text(sum.activeBacklogs !== undefined && sum.activeBacklogs !== null ? String(sum.activeBacklogs) : '—', 164, 98);
+    doc.text(cumulativeData.backlogs !== undefined && cumulativeData.backlogs !== null ? String(cumulativeData.backlogs) : '—', 164, 98);
     
     // Semester breakdowns
     let yPos = 122;
-    const semesters = record.semesters || {};
     
-    Object.keys(semesters).forEach((semKey) => {
+    Object.keys(semesters).sort().forEach((semKey) => {
         const courses = semesters[semKey] || [];
         if (courses.length === 0) return;
         
-        if (yPos > 240) {
+        if (yPos > 230) {
             doc.addPage();
             yPos = 20;
         }
@@ -5104,25 +5521,50 @@ function downloadReportPDF(record) {
         
         doc.setFont("helvetica", "normal");
         courses.forEach(c => {
-            if (yPos > 270) {
+            const subj = c.subject || '—';
+            const subjLines = doc.splitTextToSize(subj, 85);
+            const rowHeight = Math.max(subjLines.length * 5, 6);
+
+            if (yPos + rowHeight > 275) {
                 doc.addPage();
                 yPos = 20;
             }
             
-            let subj = c.subject || '—';
-            if (subj.length > 50) subj = subj.substring(0, 47) + '...';
-            
-            doc.text(c.code || '—', 16, yPos);
-            doc.text(subj, 46, yPos);
-            doc.text(c.credits !== null ? String(c.credits) : '—', 136, yPos);
-            doc.text(c.grade || '—', 156, yPos);
+            doc.text(c.code || '—', 16, yPos + 4);
+            subjLines.forEach((line, index) => {
+                doc.text(line, 46, yPos + 4 + (index * 5));
+            });
+            doc.text(c.credits !== null ? String(c.credits) : '—', 136, yPos + 4);
+            doc.text(c.grade || '—', 156, yPos + 4);
             
             const gp = GRADE_POINT_MAPPING[c.grade];
-            doc.text(gp !== undefined ? String(gp) : '—', 176, yPos);
-            yPos += 5;
+            doc.text(gp !== undefined ? String(gp) : '—', 176, yPos + 4);
+            
+            yPos += rowHeight;
         });
-        
-        yPos += 6; 
+
+        // Semester Calculations Summary
+        const semNum = parseInt(semKey.replace('sem', ''));
+        const originalSem = state.semesters;
+        state.semesters = semesters;
+        const semCalc = calculateSemester(semKey);
+        const semsUpToSem = [];
+        for (let k = 1; k <= semNum; k++) {
+            semsUpToSem.push('sem' + k);
+        }
+        const cumulativeCalc = calculateCombined(semsUpToSem);
+        state.semesters = originalSem;
+
+        yPos += 2;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(...textColor);
+        let summaryLine = `Semester SGPA: ${semCalc.sgpa !== null ? semCalc.sgpa.toFixed(2) : '—'}  |  Semester Credits: ${semCalc.totalCredits}`;
+        if (semNum > 1 && cumulativeCalc.cgpa !== null) {
+            summaryLine += `  |  Cumulative CGPA: ${cumulativeCalc.cgpa.toFixed(2)}`;
+        }
+        doc.text(summaryLine, 14, yPos);
+        yPos += 8;
     });
     
     // Page Footer Notes
@@ -5200,8 +5642,14 @@ function loadProfilesFromDb() {
                     if (state.profiles.length === 0) {
                         createDefaultProfile();
                     } else {
+                        // Ensure activeProfileId is valid
+                        if (!state.profiles.some(p => p.id === state.activeProfileId)) {
+                            state.activeProfileId = state.profiles[0].id;
+                        }
                         populateProfileSelect();
                     }
+                    // Load academic data for the now-resolved active profile
+                    loadUserDataFromStorage(user.uid);
                 })
                 .catch(err => {
                     console.warn("Failed to load profiles from Firestore:", err);
@@ -5221,22 +5669,31 @@ function loadProfilesFromStorage() {
     if (!state.profiles || state.profiles.length === 0) {
         createDefaultProfile();
     } else {
+        if (!state.profiles.some(p => p.id === state.activeProfileId)) {
+            state.activeProfileId = state.profiles[0].id;
+        }
         populateProfileSelect();
     }
+    const uid = state.auth.user ? state.auth.user.uid : 'default';
+    loadUserDataFromStorage(uid);
 }
 
 function createDefaultProfile() {
     const defaultProfile = {
         id: 'prof_default',
         nickname: 'My M.Tech Result',
-        studentName: state.auth.user ? (state.auth.user.displayName || 'Subham Kumar') : 'Subham Kumar',
-        rollNumber: '2314056',
+        studentName: state.auth.user ? (state.auth.user.displayName || '') : '',
+        rollNumber: '',
+        department: '',
+        specialization: '',
         createdAt: new Date().toISOString()
     };
     state.profiles = [defaultProfile];
     state.activeProfileId = 'prof_default';
     saveProfileToStorage();
     populateProfileSelect();
+    const uid = state.auth.user ? state.auth.user.uid : 'default';
+    loadUserDataFromStorage(uid);
 }
 
 function saveProfileToStorage() {
@@ -5273,11 +5730,31 @@ function bindAnalyzerEvents() {
     if (closeProfileBtn) closeProfileBtn.addEventListener('click', hideProfileModal);
     if (cancelProfileBtn) cancelProfileBtn.addEventListener('click', hideProfileModal);
     
+    const newDeptSelect = document.getElementById('new-profile-dept');
+    const newSpecSelect = document.getElementById('new-profile-spec');
+    if (newDeptSelect && newSpecSelect) {
+        newDeptSelect.addEventListener('change', () => {
+            const deptVal = newDeptSelect.value;
+            newSpecSelect.innerHTML = '<option value="">Select Specialization</option>';
+            if (deptVal && DEPARTMENTS[deptVal]) {
+                const specs = DEPARTMENTS[deptVal].specializations;
+                Object.keys(specs).forEach(key => {
+                    const opt = document.createElement('option');
+                    opt.value = key;
+                    opt.textContent = specs[key].name;
+                    newSpecSelect.appendChild(opt);
+                });
+            }
+        });
+    }
+
     if (saveProfileBtn) {
         saveProfileBtn.addEventListener('click', () => {
             const nickInput = document.getElementById('new-profile-nickname');
             const nameInput = document.getElementById('new-profile-name');
             const rollInput = document.getElementById('new-profile-roll');
+            const deptInput = document.getElementById('new-profile-dept');
+            const specInput = document.getElementById('new-profile-spec');
             
             const nickname = (nickInput ? nickInput.value : '').trim();
             if (!nickname) {
@@ -5290,6 +5767,8 @@ function bindAnalyzerEvents() {
                 nickname,
                 studentName: (nameInput ? nameInput.value : '').trim(),
                 rollNumber: (rollInput ? rollInput.value : '').trim(),
+                department: (deptInput ? deptInput.value : '').trim(),
+                specialization: (specInput ? specInput.value : '').trim(),
                 createdAt: new Date().toISOString()
             };
             
@@ -5307,6 +5786,15 @@ function bindAnalyzerEvents() {
             }
             
             populateProfileSelect();
+            
+            // Clear inputs
+            if (nickInput) nickInput.value = '';
+            if (nameInput) nameInput.value = '';
+            if (rollInput) rollInput.value = '';
+            if (deptInput) deptInput.value = '';
+            if (specInput) specInput.innerHTML = '<option value="">Select Specialization</option>';
+
+            loadUserDataFromStorage(user ? user.uid : 'default');
             hideProfileModal();
             showToast(`Profile "${nickname}" created.`, "success");
         });
@@ -5315,6 +5803,8 @@ function bindAnalyzerEvents() {
     if (profileSelect) {
         profileSelect.addEventListener('change', (e) => {
             state.activeProfileId = e.target.value;
+            const uid = state.auth.user ? state.auth.user.uid : 'default';
+            loadUserDataFromStorage(uid);
             showToast("Active profile switched.", "info");
         });
     }
@@ -5434,14 +5924,40 @@ function renderAnalyzerWorkbench() {
         tbody.appendChild(tr);
     });
 
-    const sgpa = totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : '0.00';
-    
     const sgpaEl = document.getElementById('analyzer-calc-sgpa');
+    const cgpaEl = document.getElementById('analyzer-calc-cgpa');
+    const cgpaRow = document.getElementById('analyzer-calc-cgpa-row');
     const credEl = document.getElementById('analyzer-calc-credits');
     const passEl = document.getElementById('analyzer-calc-passed');
     const failEl = document.getElementById('analyzer-calc-failed');
 
-    if (sgpaEl) sgpaEl.textContent = sgpa;
+    const sgpaLabel = sgpaEl?.previousElementSibling;
+
+    if (selectedSem === 'all') {
+        if (sgpaLabel) sgpaLabel.textContent = 'Calculated CGPA:';
+        const overall = calculateCombined(['sem1', 'sem2', 'sem3', 'sem4']);
+        if (sgpaEl) sgpaEl.textContent = overall.cgpa !== null ? overall.cgpa.toFixed(2) : '0.00';
+        if (cgpaRow) cgpaRow.style.display = 'none';
+    } else if (selectedSem === 'sem1') {
+        if (sgpaLabel) sgpaLabel.textContent = 'Calculated SGPA:';
+        const semData = calculateSemester('sem1');
+        if (sgpaEl) sgpaEl.textContent = semData.sgpa !== null ? semData.sgpa.toFixed(2) : '0.00';
+        if (cgpaRow) cgpaRow.style.display = 'none';
+    } else {
+        if (sgpaLabel) sgpaLabel.textContent = 'Calculated SGPA:';
+        const semData = calculateSemester(selectedSem);
+        if (sgpaEl) sgpaEl.textContent = semData.sgpa !== null ? semData.sgpa.toFixed(2) : '0.00';
+        
+        const semNum = parseInt(selectedSem.replace('sem', ''));
+        const semsUpToSelected = [];
+        for (let k = 1; k <= semNum; k++) {
+            semsUpToSelected.push('sem' + k);
+        }
+        const cumulative = calculateCombined(semsUpToSelected);
+        if (cgpaEl) cgpaEl.textContent = cumulative.cgpa !== null ? cumulative.cgpa.toFixed(2) : '0.00';
+        if (cgpaRow) cgpaRow.style.display = 'flex';
+    }
+
     if (credEl) credEl.textContent = totalCredits;
     if (passEl) passEl.textContent = passedCount;
     if (failEl) failEl.textContent = failedCount;
