@@ -799,23 +799,58 @@ a.btn-text:hover {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
+  display: block;
+}
+
+.subjects-table thead,
+.subjects-table tbody {
+  display: block;
+  width: 100%;
+}
+
+.subjects-table tr {
+  display: grid;
+  grid-template-columns: minmax(110px, 1.15fr) minmax(160px, 1.35fr) 130px 80px 80px 70px 100px 50px 95px 45px;
+  align-items: start;
+  width: 100%;
+  border-bottom: 1px solid var(--border);
+  box-sizing: border-box;
+}
+
+.subjects-table.grade-mode tr {
+  grid-template-columns: minmax(130px, 1.25fr) minmax(180px, 1.75fr) 80px 120px 60px 110px 50px;
 }
 
 .subjects-table th {
-  padding: 8px 10px;
+  padding: 10px 6px;
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
   color: var(--muted);
-  border-bottom: 1px solid var(--border);
-  text-align: left;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
 }
 
 .subjects-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
-  vertical-align: middle;
+  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  box-sizing: border-box;
+}
+
+.subjects-table th.col-obtained,
+.subjects-table th.col-max,
+.subjects-table th.col-credits,
+.subjects-table th.col-grade,
+.subjects-table th.col-gp,
+.subjects-table th.col-status,
+.subjects-table th.col-action {
+  justify-content: center;
+  text-align: center;
 }
 
 .subjects-table tbody tr:hover td {
@@ -832,7 +867,9 @@ a.btn-text:hover {
   color: var(--text);
   background: var(--surface);
   transition: all 0.15s;
+  height: 36px;
   min-height: 36px;
+  box-sizing: border-box;
 }
 
 .input-code:focus, .input-marks:focus, .input-credits:focus, .input-verify-metric:focus, .dash-search-input:focus, .input-subject:focus {
@@ -842,8 +879,8 @@ a.btn-text:hover {
 }
 
 .input-code { width: 100%; }
-.input-marks { max-width: 65px; text-align: center; }
-.input-credits { max-width: 70px; text-align: center; }
+.input-marks { max-width: 100% !important; text-align: center; }
+.input-credits { max-width: 100% !important; text-align: center; }
 
 .select-type, .select-grade, .select-base, .select-verify-sem, .select-attempt-type-input {
   width: 100%;
@@ -855,7 +892,9 @@ a.btn-text:hover {
   background: var(--surface);
   cursor: pointer;
   transition: all 0.15s;
+  height: 36px;
   min-height: 36px;
+  box-sizing: border-box;
 }
 
 .select-type:focus, .select-grade:focus, .select-base:focus, .select-verify-sem:focus {
@@ -864,30 +903,50 @@ a.btn-text:hover {
   box-shadow: 0 0 0 3px rgba(158, 27, 27, 0.08);
 }
 
-.select-type { max-width: 130px; }
-.select-grade { max-width: 100px; }
-.select-attempt-type-input { max-width: 130px; }
+.select-type { max-width: 100% !important; }
+.select-grade { max-width: 100% !important; }
+.select-attempt-type-input { max-width: 100% !important; }
+
+/* Custom cell flex-alignment */
+.subjects-table .gp-cell,
+.subjects-table .status-cell,
+.subjects-table .remove-cell {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  text-align: center;
+}
 
 .grade-point-display {
   font-size: 0.9rem;
   font-weight: 700;
-  text-align: center;
   color: var(--text);
-  min-width: 30px;
 }
 
 .normalized-subtext {
   display: block;
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   color: var(--muted);
-  margin-top: 2px;
+  margin-top: 4px;
+  text-align: center;
+  width: 100%;
 }
 
 .validation-warning {
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   color: var(--danger);
-  margin-top: 3px;
+  margin-top: 4px;
   display: block;
+  width: 100%;
+  text-align: left;
+}
+
+.gp-cell .validation-warning,
+.status-cell .validation-warning,
+.remove-cell .validation-warning {
+  text-align: center;
 }
 
 .input-highlight-warning {
@@ -2056,36 +2115,127 @@ a.btn-text:hover {
 
 /* 24. Mobile Responsive Adjustments */
 @media (max-width: 767px) {
-  .subjects-table thead { display: none; }
+  .subjects-table thead {
+    display: none !important;
+  }
   .subjects-table, .subjects-table tbody, .subjects-table tr, .subjects-table td {
     display: block;
     width: 100%;
+    box-sizing: border-box;
+  }
+  .subjects-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
   }
   .subjects-table tr {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r-md);
-    margin-bottom: 12px;
-    padding: 12px;
+    padding: 16px;
     box-shadow: var(--shadow-sm);
-  }
-  .subjects-table td {
-    border-bottom: none;
-    padding: 6px 0;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    flex-direction: column;
+    gap: 12px;
   }
+  
+  .subjects-table td {
+    padding: 0 !important;
+    border-bottom: none !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+  }
+
   .subjects-table td::before {
     content: attr(data-label);
     font-size: 0.68rem;
     font-weight: 700;
     text-transform: uppercase;
     color: var(--muted);
-    flex-shrink: 0;
-    min-width: 80px;
+    margin-bottom: 4px;
+    display: block;
+    text-align: left;
   }
+  
+  /* Layout rows for Grade Mode */
+  .subjects-table.grade-mode tr {
+    display: grid !important;
+    grid-template-columns: repeat(6, 1fr);
+    grid-gap: 12px;
+  }
+  .subjects-table.grade-mode td.course-cell {
+    grid-column: 1 / span 6;
+  }
+  .subjects-table.grade-mode td.subject-cell {
+    grid-column: 1 / span 6;
+  }
+  .subjects-table.grade-mode td.credits-cell {
+    grid-column: 1 / span 2;
+  }
+  .subjects-table.grade-mode td.grade-cell {
+    grid-column: 3 / span 4;
+  }
+  .subjects-table.grade-mode td.gp-cell {
+    grid-column: 1 / span 2;
+    justify-content: center;
+    align-items: center;
+  }
+  .subjects-table.grade-mode td.status-cell {
+    grid-column: 3 / span 3;
+    justify-content: center;
+    align-items: center;
+  }
+  .subjects-table.grade-mode td.remove-cell {
+    grid-column: 6;
+    justify-content: center;
+    align-items: center;
+  }
+
+  /* Layout rows for Marks Mode */
+  .subjects-table:not(.grade-mode) tr {
+    display: grid !important;
+    grid-template-columns: repeat(6, 1fr);
+    grid-gap: 12px;
+  }
+  .subjects-table:not(.grade-mode) td.course-cell {
+    grid-column: 1 / span 6;
+  }
+  .subjects-table:not(.grade-mode) td.subject-cell {
+    grid-column: 1 / span 6;
+  }
+  .subjects-table:not(.grade-mode) td.type-cell {
+    grid-column: 1 / span 6;
+  }
+  .subjects-table:not(.grade-mode) td.obtained-cell {
+    grid-column: 1 / span 2;
+  }
+  .subjects-table:not(.grade-mode) td.max-cell {
+    grid-column: 3 / span 2;
+  }
+  .subjects-table:not(.grade-mode) td.credits-cell {
+    grid-column: 5 / span 2;
+  }
+  .subjects-table:not(.grade-mode) td.grade-cell {
+    grid-column: 1 / span 3;
+  }
+  .subjects-table:not(.grade-mode) td.gp-cell {
+    grid-column: 4 / span 3;
+    justify-content: center;
+    align-items: center;
+  }
+  .subjects-table:not(.grade-mode) td.status-cell {
+    grid-column: 1 / span 4;
+    justify-content: center;
+    align-items: center;
+  }
+  .subjects-table:not(.grade-mode) td.remove-cell {
+    grid-column: 5 / span 2;
+    justify-content: center;
+    align-items: center;
+  }
+  
   .subjects-table td input, .subjects-table td select {
     max-width: 100% !important;
   }

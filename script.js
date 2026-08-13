@@ -3500,6 +3500,9 @@ window.AuthService = {
     isLoading: () => state.auth.loading,
     
     login: (email, password, remember) => {
+        if (state.auth.mode === 'disabled') {
+            return Promise.reject({ code: 'auth/configuration-error', message: 'Firebase configuration is missing or invalid on Vercel. Please check settings.' });
+        }
         if (state.auth.mode === 'firebase') {
             const auth = getFirebaseAuth();
             const persistence = remember ? browserLocalPersistence : browserSessionPersistence;
@@ -3529,6 +3532,9 @@ window.AuthService = {
     },
     
     signup: (name, email, password) => {
+        if (state.auth.mode === 'disabled') {
+            return Promise.reject({ code: 'auth/configuration-error', message: 'Firebase configuration is missing or invalid on Vercel. Please check settings.' });
+        }
         if (state.auth.mode === 'firebase') {
             const auth = getFirebaseAuth();
             const db = getFirebaseDb();
@@ -3576,6 +3582,9 @@ window.AuthService = {
     },
     
     loginWithGoogle: () => {
+        if (state.auth.mode === 'disabled') {
+            return Promise.reject({ code: 'auth/configuration-error', message: 'Firebase configuration is missing or invalid on Vercel. Please check settings.' });
+        }
         if (state.auth.mode === 'firebase') {
             const auth = getFirebaseAuth();
             const db = getFirebaseDb();
@@ -3595,6 +3604,8 @@ window.AuthService = {
                             updatedAt: serverTimestamp()
                         });
                     }
+                    // For Firebase auth, let's call handleAuthState explicitly upon success to trigger UI updates
+                    handleAuthState(user);
                     return user;
                 });
         } else {
@@ -3629,6 +3640,9 @@ window.AuthService = {
     },
     
     resetPassword: (email) => {
+        if (state.auth.mode === 'disabled') {
+            return Promise.reject({ code: 'auth/configuration-error', message: 'Firebase configuration is missing or invalid on Vercel. Please check settings.' });
+        }
         if (state.auth.mode === 'firebase') {
             return sendPasswordResetEmail(getFirebaseAuth(), email);
         } else {
@@ -3645,10 +3659,12 @@ function initAuth() {
         hideLoadingOverlay();
     }, 1500);
 
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
     fetch('/api/config')
         .then(res => res.json())
         .then(config => {
-            const hasFirebaseConfig = config && config.apiKey && config.projectId;
+            const hasFirebaseConfig = config && config.apiKey && config.apiKey.trim() !== "" && !config.apiKey.includes('your-api-key-here') && !config.apiKey.includes('api.example.com');
             if (hasFirebaseConfig) {
                 const { auth } = initializeFirebase(config);
                 state.auth.mode = 'firebase';
@@ -3660,13 +3676,28 @@ function initAuth() {
                 });
             } else {
                 clearTimeout(overlayTimeout);
-                initMockAuth();
+                if (isLocalhost) {
+                    initMockAuth();
+                } else {
+                    console.error("Firebase configuration missing or invalid in production.");
+                    state.auth.mode = 'disabled';
+                    state.auth.loading = false;
+                    showToast("Configuration Error: Firebase environment variables are missing or set to placeholder values. Please check Vercel settings.", "error");
+                    hideLoadingOverlay();
+                }
             }
         })
         .catch(err => {
-            console.warn("Failed to fetch Firebase config, defaulting to Mock Auth Mode:", err);
+            console.warn("Failed to fetch Firebase config:", err);
             clearTimeout(overlayTimeout);
-            initMockAuth();
+            if (isLocalhost) {
+                initMockAuth();
+            } else {
+                state.auth.mode = 'disabled';
+                state.auth.loading = false;
+                showToast("System Error: Failed to fetch Firebase configuration from the backend.", "error");
+                hideLoadingOverlay();
+            }
         });
 
     setupAuthUIEvents();
@@ -3722,18 +3753,33 @@ function handleAuthState(user) {
 
         // Update Desktop Header Profile Display
         const profileWrapper = document.getElementById('profile-wrapper');
-        if (profileWrapper) {
-            profileWrapper.style.display = 'block';
-        }
-        const initial = displayName.charAt(0).toUpperCase() || 'U';
-        const avatarEl = document.getElementById('profile-avatar');
+        if (profileWrapper) {        const avatarEl = document.getElementById('profile-avatar');
         const dropdownAvatarEl = document.getElementById('profile-dropdown-avatar');
         const nameEl = document.getElementById('profile-name');
         const dropdownNameEl = document.getElementById('profile-dropdown-name');
         const dropdownEmailEl = document.getElementById('profile-dropdown-email');
         
-        if (avatarEl) avatarEl.textContent = initial;
-        if (dropdownAvatarEl) dropdownAvatarEl.textContent = initial;
+        if (user.photoURL) {
+            const imgHtml = `<img src="${user.photoURL}" alt="${displayName}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block;">`;
+            if (avatarEl) {
+                avatarEl.innerHTML = imgHtml;
+                avatarEl.style.padding = '0';
+            }
+            if (dropdownAvatarEl) {
+                dropdownAvatarEl.innerHTML = imgHtml;
+                dropdownAvatarEl.style.padding = '0';
+            }
+        } else {
+            const initial = displayName.charAt(0).toUpperCase() || 'U';
+            if (avatarEl) {
+                avatarEl.textContent = initial;
+                avatarEl.style.padding = '';
+            }
+            if (dropdownAvatarEl) {
+                dropdownAvatarEl.textContent = initial;
+                dropdownAvatarEl.style.padding = '';
+            }
+        }
         if (nameEl) nameEl.textContent = displayName;
         if (dropdownNameEl) dropdownNameEl.textContent = displayName;
         if (dropdownEmailEl) dropdownEmailEl.textContent = user.email || '';
@@ -3758,7 +3804,7 @@ function handleAuthState(user) {
         
         if (dom.mobileUserInfo) dom.mobileUserInfo.style.display = 'none';
 
-        // Hide Desktop Header Profile Display
+        // Hide Desktop Header Profile Display and Reset Avatar markup
         const profileWrapper = document.getElementById('profile-wrapper');
         if (profileWrapper) {
             profileWrapper.style.display = 'none';
@@ -3767,6 +3813,17 @@ function handleAuthState(user) {
         const profileTrigger = document.getElementById('profile-trigger');
         if (profileDropdown) profileDropdown.classList.remove('show');
         if (profileTrigger) profileTrigger.classList.remove('active');
+
+        const avatarEl = document.getElementById('profile-avatar');
+        const dropdownAvatarEl = document.getElementById('profile-dropdown-avatar');
+        if (avatarEl) {
+            avatarEl.innerHTML = 'U';
+            avatarEl.style.padding = '';
+        }
+        if (dropdownAvatarEl) {
+            dropdownAvatarEl.innerHTML = 'U';
+            dropdownAvatarEl.style.padding = '';
+        }
         
         showAuthView('login');
     }
