@@ -475,6 +475,12 @@ function switchTab(tabId) {
         }
     });
 
+    // Hide Grade Rules reference section when viewing History or Analysis tabs
+    const gradeRulesSec = document.getElementById('grade-rules');
+    if (gradeRulesSec) {
+        gradeRulesSec.style.display = (tabId === 'calculator' || tabId === 'advanced-calc') ? 'block' : 'none';
+    }
+
     state.activeTab = tabId;
 
     if (tabId === 'history') {
@@ -483,6 +489,7 @@ function switchTab(tabId) {
         renderAnalysis();
     }
 }
+
 
 
 // Initialize All UI Event Listeners
