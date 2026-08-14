@@ -48,7 +48,7 @@ const state = {
     // Two-Level Hierarchy State: Current Student Profile & Active Calculation
     currentProfile: {
         profileId: null,        // null = unsaved new profile; string = existing profile ID
-        studentName: 'Rohit',
+        studentName: '',         // blank on fresh load — user must enter or select
         program: 'mtech',
         department: 'cse'
     },
@@ -4128,45 +4128,12 @@ function setupRealtimeDatabaseSync(uid) {
                     profilesList.push({
                         profileId: profDoc.id,
                         ...profData,
-                        studentName: profData.studentName || 'Rohit',
+                        studentName: profData.studentName || 'Unknown Student',
                         program: profData.program || 'mtech',
                         department: profData.department || 'cse',
                         calculations
                     });
                 }
-
-                // BACKWARD COMPATIBILITY: Legacy history support
-                try {
-                    const legacySnap = await getDocs(query(collection(db, "users", uid, "history"), orderBy("createdAt", "desc")));
-                    if (!legacySnap.empty) {
-                        const legacyCalcs = [];
-                        legacySnap.forEach(lDoc => {
-                            const d = lDoc.data();
-                            legacyCalcs.push({
-                                calculationId: lDoc.id,
-                                profileId: 'legacy_prof',
-                                resultNickname: d.nickname || 'Legacy Result',
-                                program: d.program || 'mtech',
-                                department: d.department || 'cse',
-                                semesters: d.semesters,
-                                summary: d.summary,
-                                calculationMethod: d.calculationMethod,
-                                createdAt: d.createdAt,
-                                updatedAt: d.updatedAt,
-                                isLegacy: true
-                            });
-                        });
-                        if (legacyCalcs.length > 0) {
-                            profilesList.push({
-                                profileId: 'legacy_prof',
-                                studentName: 'Saved Snapshots (Legacy)',
-                                program: 'mtech',
-                                department: 'cse',
-                                calculations: legacyCalcs
-                            });
-                        }
-                    }
-                } catch (e) {}
 
                 stateProfileHistory = profilesList;
                 renderHistoryList();
@@ -4508,12 +4475,12 @@ async function initCurrentResultFromDraft(uid) {
 function _applyDraftToState(d) {
     if (!d) return;
     state.currentProfile.profileId = d.profileId || null;
-    state.currentProfile.studentName = d.studentName || 'Rohit';
+    state.currentProfile.studentName = d.studentName || '';  // never auto-fill a name
     state.currentProfile.program = d.program || 'mtech';
     state.currentProfile.department = d.department || 'cse';
 
     state.currentCalculation.calculationId = d.calculationId || null;
-    state.currentCalculation.resultNickname = d.resultNickname || d.nickname || 'Main Result';
+    state.currentCalculation.resultNickname = d.resultNickname || d.nickname || '';
     state.currentCalculation.isDirty = false;
 
     state.semesters = d.semesters ? JSON.parse(JSON.stringify(d.semesters)) : state.semesters;
@@ -4523,7 +4490,7 @@ function _applyDraftToState(d) {
     if (dom.calcResultNickname) dom.calcResultNickname.value = state.currentCalculation.resultNickname;
     if (dom.calcProgramSelect) dom.calcProgramSelect.value = state.currentProfile.program;
     if (dom.calcDepartmentSelect) dom.calcDepartmentSelect.value = state.currentProfile.department;
-    if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = state.currentProfile.studentName;
+    if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = state.currentProfile.studentName || 'No Student Selected';
 }
 
 function loadUserDataFromStorage(uid) {
@@ -4558,14 +4525,14 @@ function handleNewStudent() {
 
         state.currentProfile = {
             profileId: newProfId,
-            studentName: 'Rohit',
-            program: 'mtech',
+            studentName: '',          // blank — user enters the student name
+            program: dom.calcProgramSelect?.value || 'mtech',
             department: dom.calcDepartmentSelect?.value || 'cse'
         };
 
         state.currentCalculation = {
             calculationId: newCalcId,
-            resultNickname: 'Current Result',
+            resultNickname: '',
             isDirty: false,
             mode: 'normal',
             situation: 'normal'
@@ -4574,10 +4541,9 @@ function handleNewStudent() {
         ['sem1', 'sem2', 'sem3', 'sem4'].forEach(s => { state.semesters[s] = []; });
         state.selectedSemesters = { sem1: false, sem2: false, sem3: false, sem4: false };
 
-        if (dom.calcStudentName) dom.calcStudentName.value = 'Rohit';
-        if (dom.calcResultNickname) dom.calcResultNickname.value = 'Current Result';
-        if (dom.calcProgramSelect) dom.calcProgramSelect.value = 'mtech';
-        if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = 'Rohit';
+        if (dom.calcStudentName) { dom.calcStudentName.value = ''; dom.calcStudentName.focus(); }
+        if (dom.calcResultNickname) dom.calcResultNickname.value = '';
+        if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = 'New Student';
 
         applyPredefinedCourses();
         calculateAndRefresh();
@@ -4586,7 +4552,7 @@ function handleNewStudent() {
         const statusEl = document.getElementById('auto-save-status');
         if (statusEl) statusEl.textContent = '';
 
-        showToast('Created new Student Profile "Rohit". Enter result details.', 'info');
+        showToast('New Student Profile started. Enter the student name above.', 'info');
     };
 
     if (hasCourses && state.currentCalculation.isDirty) {
@@ -4601,9 +4567,10 @@ function handleNewStudent() {
 
 // 2. "+ NEW RESULT" -> Creates a new result under the CURRENT Student Profile
 function handleNewResult() {
-    const studentName = (dom.calcStudentName?.value || state.currentProfile.studentName || 'Rohit').trim();
+    // Keep the current student profile — New Result is a new calculation under the SAME student
+    const studentName = (dom.calcStudentName?.value || state.currentProfile.studentName || '').trim();
     state.currentProfile.studentName = studentName;
-    if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = studentName;
+    if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = studentName || 'No Student Selected';
 
     const hasCourses = Object.values(state.semesters).some(arr => arr.some(c => c.grade !== '' && c.grade !== null));
     const doAddCalc = () => {
@@ -4614,7 +4581,7 @@ function handleNewResult() {
         const newCalcId = 'result_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
         state.currentCalculation = {
             calculationId: newCalcId,
-            resultNickname: '1st–2nd Semester',
+            resultNickname: '',       // blank — user enters the result name
             isDirty: false,
             mode: 'normal',
             situation: 'normal'
@@ -4623,7 +4590,7 @@ function handleNewResult() {
         ['sem1', 'sem2', 'sem3', 'sem4'].forEach(s => { state.semesters[s] = []; });
         state.selectedSemesters = { sem1: false, sem2: false, sem3: false, sem4: false };
 
-        if (dom.calcResultNickname) dom.calcResultNickname.value = '1st–2nd Semester';
+        if (dom.calcResultNickname) { dom.calcResultNickname.value = ''; dom.calcResultNickname.focus(); }
 
         applyPredefinedCourses();
         calculateAndRefresh();
@@ -4632,12 +4599,12 @@ function handleNewResult() {
         const statusEl = document.getElementById('auto-save-status');
         if (statusEl) statusEl.textContent = '';
 
-        showToast(`New result calculation started under profile: ${studentName}`, 'success');
+        showToast(`New calculation started under "${studentName || 'current student'}". Enter a result name above.`, 'success');
     };
 
     if (hasCourses && state.currentCalculation.isDirty) {
         showConfirmModal(
-            `Create a new result calculation under "${studentName}"? Unsaved grades in current calculation will be cleared.`,
+            `Create a new result calculation under "${studentName || 'current student'}"? Unsaved grades in current calculation will be cleared.`,
             doAddCalc
         );
     } else {
@@ -4795,9 +4762,15 @@ async function saveCurrentToHistory() {
         clearCurrentDraft(uid);
         state.currentCalculation.isDirty = false;
 
-        // Post-save: return calculator workspace to a clean state for next entry
+        // Post-save: keep the student profile active, reset only the result/calculation fields
+        // This lets user immediately start a NEW result under the SAME student profile
         state.currentCalculation.calculationId = null;
+        state.currentCalculation.resultNickname = '';
         ['sem1', 'sem2', 'sem3', 'sem4'].forEach(s => { state.semesters[s] = []; });
+
+        // Update UI fields — keep student name/profile, clear result name
+        if (dom.calcResultNickname) dom.calcResultNickname.value = '';
+
         applyPredefinedCourses();
         calculateAndRefresh();
         render();
@@ -5335,47 +5308,11 @@ window.loadHistoryFromDb = async function() {
                     profilesList.push({
                         profileId: profDoc.id,
                         ...profData,
-                        studentName: profData.studentName || 'Rohit',
+                        studentName: profData.studentName || 'Unknown Student',
                         program: profData.program || 'mtech',
                         department: profData.department || 'cse',
                         calculations
                     });
-                }
-
-                // BACKWARD COMPATIBILITY: Fetch any legacy flat history records from users/{uid}/history
-                try {
-                    const legacySnap = await getDocs(query(collection(db, "users", uid, "history"), orderBy("createdAt", "desc")));
-                    if (!legacySnap.empty) {
-                        const legacyCalcs = [];
-                        legacySnap.forEach(lDoc => {
-                            const d = lDoc.data();
-                            legacyCalcs.push({
-                                calculationId: lDoc.id,
-                                profileId: 'legacy_prof',
-                                resultNickname: d.nickname || 'Legacy Result',
-                                program: d.program || 'mtech',
-                                department: d.department || 'cse',
-                                semesters: d.semesters,
-                                summary: d.summary,
-                                calculationMethod: d.calculationMethod,
-                                createdAt: d.createdAt,
-                                updatedAt: d.updatedAt,
-                                isLegacy: true
-                            });
-                        });
-                        
-                        if (legacyCalcs.length > 0) {
-                            profilesList.push({
-                                profileId: 'legacy_prof',
-                                studentName: 'Saved Snapshots (Legacy)',
-                                program: 'mtech',
-                                department: 'cse',
-                                calculations: legacyCalcs
-                            });
-                        }
-                    }
-                } catch (e) {
-                    console.warn("Legacy history read warning:", e);
                 }
 
                 stateProfileHistory = profilesList;
@@ -5563,6 +5500,15 @@ function renderHistoryList() {
 
     // Filter profiles that have calculations
     profilesToRender = profilesToRender.filter(prof => prof.calculations && prof.calculations.length > 0);
+
+    // Rename any profiles that still have the legacy placeholder name from old migration code
+    profilesToRender = profilesToRender.map(prof => {
+        if (prof.studentName === 'Saved Snapshots (Legacy)' || prof.studentName === '') {
+            return { ...prof, studentName: 'My Results', _wasLegacy: true };
+        }
+        return prof;
+    });
+
     
     if (profilesToRender.length === 0) {
         container.style.display = 'none';
@@ -5594,7 +5540,7 @@ function renderHistoryList() {
                 <div>
                     <h3 style="font-size:1.1rem; font-weight:800; color:var(--text-main, var(--text)); margin:0; display:flex; align-items:center; gap:8px;">
                         <span>${prof.studentName || 'Student Profile'}</span>
-                        <button type="button" class="history-action-btn edit-prof-name-btn" style="padding:2px 6px; font-size:0.75rem;" title="Rename Profile">✏️ Edit Name</button>
+                        ${prof.profileId !== 'legacy_prof' ? `<button type="button" class="history-action-btn edit-prof-name-btn" style="padding:2px 6px; font-size:0.75rem;" title="Rename Profile">✏️ Edit Name</button>` : ''}
                     </h3>
                     <p style="font-size:0.8rem; color:var(--muted); margin:4px 0 0 0;">${progName} • ${deptName}</p>
                 </div>
@@ -5637,7 +5583,10 @@ function renderHistoryList() {
         `;
 
         // Bind Profile Card Header buttons
-        profCard.querySelector('.edit-prof-name-btn').addEventListener('click', () => renameProfileRecord(prof.profileId, prof.studentName));
+        const editProfNameBtn = profCard.querySelector('.edit-prof-name-btn');
+        if (editProfNameBtn) {
+            editProfNameBtn.addEventListener('click', () => renameProfileRecord(prof.profileId, prof.studentName));
+        }
         
         const deleteProfBtn = profCard.querySelector('.delete-prof-btn');
         if (deleteProfBtn) {
@@ -5690,7 +5639,7 @@ function loadCalculationIntoCalculator(prof, calc) {
     const doLoad = () => {
         state.currentProfile = {
             profileId: prof.profileId === 'legacy_prof' ? null : prof.profileId,
-            studentName: prof.studentName || 'Rohit',
+            studentName: prof.studentName || '',
             program: prof.program || calc.program || 'mtech',
             department: prof.department || calc.department || 'cse'
         };
