@@ -4082,6 +4082,13 @@ function setupRealtimeDatabaseSync(uid) {
 
     if (!uid || state.auth.mode !== 'firebase') return;
 
+    // Verify Firebase Auth state before attaching listener
+    const auth = getFirebaseAuth();
+    if (!auth || !auth.currentUser || auth.currentUser.uid !== uid) {
+        console.warn("setupRealtimeDatabaseSync: Auth not ready or user mismatch. Skipping listener.");
+        return;
+    }
+
     const db = getFirebaseDb();
     if (!db) return;
 
@@ -4089,10 +4096,19 @@ function setupRealtimeDatabaseSync(uid) {
         const profCol = collection(db, "users", uid, "resultProfiles");
         unsubscribeProfilesListener = onSnapshot(profCol, async (profSnap) => {
             try {
+                // Verify user remains authenticated during snapshot execution
+                const activeAuth = getFirebaseAuth();
+                if (!activeAuth || !activeAuth.currentUser) return;
+
                 const profilesList = [];
                 for (const profDoc of profSnap.docs) {
                     const profData = profDoc.data();
-                    const calcSnap = await getDocs(query(collection(db, "users", uid, "resultProfiles", profDoc.id, "calculations"), orderBy("updatedAt", "desc")));
+                    let calcSnap;
+                    try {
+                        calcSnap = await getDocs(query(collection(db, "users", uid, "resultProfiles", profDoc.id, "calculations"), orderBy("updatedAt", "desc")));
+                    } catch (e) {
+                        calcSnap = await getDocs(collection(db, "users", uid, "resultProfiles", profDoc.id, "calculations"));
+                    }
                     
                     const calculations = [];
                     calcSnap.forEach(cDoc => {
@@ -4100,6 +4116,13 @@ function setupRealtimeDatabaseSync(uid) {
                             calculationId: cDoc.id,
                             ...cDoc.data()
                         });
+                    });
+
+                    // In-memory sort by updatedAt descending
+                    calculations.sort((a, b) => {
+                        const tA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+                        const tB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+                        return tB - tA;
                     });
 
                     profilesList.push({
@@ -4154,13 +4177,17 @@ function setupRealtimeDatabaseSync(uid) {
                 console.error("Error processing real-time profiles update:", err);
             }
         }, (error) => {
-            console.error("Real-time database sync listener error:", error);
-            showToast("Database sync error: " + error.message, "warning");
+            if (error.code === 'permission-denied') {
+                console.warn("Real-time database sync listener paused: User not authenticated or permission restricted.");
+            } else {
+                console.error("Real-time database sync listener error:", error);
+            }
         });
     } catch (err) {
         console.error("Failed to attach real-time database listener:", err);
     }
 }
+
 
 function handleAuthState(user) {
     state.auth.loading = false;
@@ -4429,6 +4456,11 @@ async function initCurrentResultFromDraft(uid) {
 
     // 2. Try Firestore for the authoritative draft
     if (state.auth.mode === 'firebase') {
+        const auth = getFirebaseAuth();
+        if (!auth || !auth.currentUser || auth.currentUser.uid !== uid) {
+            return;
+        }
+
         const db = getFirebaseDb();
         if (db) {
             try {
@@ -4446,10 +4478,15 @@ async function initCurrentResultFromDraft(uid) {
                     }
                 }
             } catch (err) {
-                console.warn("Firestore draft load failed:", err);
+                if (err.code === 'permission-denied') {
+                    console.warn("Firestore draft load skipped: Auth permission denied.");
+                } else {
+                    console.warn("Firestore draft load failed:", err);
+                }
             }
         }
     }
+
 }
 
 function _applyDraftToState(d) {
@@ -5244,6 +5281,11 @@ window.loadHistoryFromDb = async function() {
     }
     
     if (state.auth.mode === 'firebase') {
+        const auth = getFirebaseAuth();
+        if (!auth || !auth.currentUser || auth.currentUser.uid !== uid) {
+            return;
+        }
+
         const db = getFirebaseDb();
         if (db) {
             try {
@@ -5252,7 +5294,12 @@ window.loadHistoryFromDb = async function() {
                 
                 for (const profDoc of profSnap.docs) {
                     const profData = profDoc.data();
-                    const calcSnap = await getDocs(query(collection(db, "users", uid, "resultProfiles", profDoc.id, "calculations"), orderBy("updatedAt", "desc")));
+                    let calcSnap;
+                    try {
+                        calcSnap = await getDocs(query(collection(db, "users", uid, "resultProfiles", profDoc.id, "calculations"), orderBy("updatedAt", "desc")));
+                    } catch (e) {
+                        calcSnap = await getDocs(collection(db, "users", uid, "resultProfiles", profDoc.id, "calculations"));
+                    }
                     
                     const calculations = [];
                     calcSnap.forEach(cDoc => {
@@ -5260,6 +5307,13 @@ window.loadHistoryFromDb = async function() {
                             calculationId: cDoc.id,
                             ...cDoc.data()
                         });
+                    });
+
+                    // In-memory sort by updatedAt descending
+                    calculations.sort((a, b) => {
+                        const tA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+                        const tB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+                        return tB - tA;
                     });
                     
                     profilesList.push({
@@ -5311,7 +5365,11 @@ window.loadHistoryFromDb = async function() {
                 stateProfileHistory = profilesList;
                 renderHistoryList();
             } catch (err) {
-                console.error("Error loading profiles and calculations from Firestore:", err);
+                if (err.code === 'permission-denied') {
+                    console.warn("loadHistoryFromDb skipped: Permission denied (User not authenticated).");
+                } else {
+                    console.error("Error loading profiles and calculations from Firestore:", err);
+                }
             }
         }
     } else {
@@ -5321,6 +5379,7 @@ window.loadHistoryFromDb = async function() {
         renderHistoryList();
     }
 };
+
 
 // Delete a calculation inside a profile
 async function deleteCalculationRecord(profileId, calculationId) {
