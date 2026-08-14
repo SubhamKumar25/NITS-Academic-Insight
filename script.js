@@ -365,6 +365,8 @@ const dom = {
     editHistCoursesEditor: document.getElementById('edit-hist-courses-editor'),
     editHistVersionDisplay: document.getElementById('edit-hist-version-display'),
     btnCancelEditHistory: document.getElementById('btn-cancel-edit-history'),
+    btnSaveChangesHistory: document.getElementById('btn-save-changes-history'),
+    btnSaveAsNewHistory: document.getElementById('btn-save-as-new-history'),
     calcStudentName: document.getElementById('calc-student-name'),
     calcResultNickname: document.getElementById('calc-result-nickname'),
     calcProgramSelect: document.getElementById('calc-program-select'),
@@ -374,6 +376,7 @@ const dom = {
     btnNewResult: document.getElementById('btn-new-result'),
     btnNewCalculation: document.getElementById('btn-new-calculation'),
     btnSaveToHistory: document.getElementById('btn-save-to-history'),
+    btnSaveAsNew: document.getElementById('btn-save-as-new'),
     currentProfileDisplayBadge: document.getElementById('current-profile-display-badge')
 };
 
@@ -575,21 +578,27 @@ function initEventListeners() {
         });
     }
 
-    // Save Result to History button
+    // Save Result to History button (overwrites existing calculation if editing)
     if (dom.btnSaveToHistory) {
         dom.btnSaveToHistory.addEventListener('click', () => {
-            saveCurrentToHistory();
+            saveCurrentToHistory(false);
         });
     }
 
+    // Save as New button (creates a new calculation under current profile)
+    if (dom.btnSaveAsNew) {
+        dom.btnSaveAsNew.addEventListener('click', () => {
+            saveCurrentToHistory(true);
+        });
+    }
 
     // Student Profile Name Input
     if (dom.calcStudentName) {
         dom.calcStudentName.addEventListener('input', () => {
-            const nameVal = dom.calcStudentName.value.trim() || 'Rohit';
+            const nameVal = dom.calcStudentName.value.trim();
             state.currentProfile.studentName = nameVal;
             state.currentCalculation.isDirty = true;
-            if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = nameVal;
+            if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = nameVal || 'No Student Selected';
             triggerAutoSave();
         });
     }
@@ -4688,7 +4697,7 @@ function resetCurrentResult() {
 }
 
 // 4. Save current calculation to History under its Student Profile
-async function saveCurrentToHistory() {
+async function saveCurrentToHistory(asNew = false) {
     const uid = state.auth.user ? state.auth.user.uid : null;
     if (!uid) {
         showToast("Please login to save records.", "error");
@@ -4733,7 +4742,10 @@ async function saveCurrentToHistory() {
 
     try {
         let profileId = state.currentProfile.profileId || ('prof_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
-        let calcId = state.currentCalculation.calculationId || ('result_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
+        let calcId = (asNew || !state.currentCalculation.calculationId) 
+            ? ('result_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5))
+            : state.currentCalculation.calculationId;
+            
         state.currentProfile.profileId = profileId;
 
         if (state.auth.mode === 'firebase') {
@@ -4763,7 +4775,7 @@ async function saveCurrentToHistory() {
                 };
 
                 await setDoc(doc(db, "users", uid, "resultProfiles", profileId, "calculations", calcId), calcPayload, { merge: true });
-                showToast(`Saved result "${resultNickname}" under "${studentName}".`, "success");
+                showToast(asNew ? `Saved as NEW result "${resultNickname}" under "${studentName}".` : `Saved result "${resultNickname}" under "${studentName}".`, "success");
             }
         } else {
             // Mock Mode
@@ -5295,7 +5307,7 @@ window.initHistorySystem = function() {
                 const nickname = dom.editHistNicknameInput ? dom.editHistNicknameInput.value : '';
                 const name = dom.editHistNameInput ? dom.editHistNameInput.value : '';
                 const roll = dom.editHistRollInput ? dom.editHistRollInput.value : '';
-                updateHistoryRecord(editingHistoryRecord.id, nickname, name, roll, editingHistoryRecord.semesters, false);
+                updateHistoryRecord(editingHistoryRecord.calculationId || editingHistoryRecord.id, nickname, name, roll, editingHistoryRecord.semesters, false);
             }
         });
     }
@@ -5306,11 +5318,73 @@ window.initHistorySystem = function() {
                 const nickname = dom.editHistNicknameInput ? dom.editHistNicknameInput.value : '';
                 const name = dom.editHistNameInput ? dom.editHistNameInput.value : '';
                 const roll = dom.editHistRollInput ? dom.editHistRollInput.value : '';
-                updateHistoryRecord(editingHistoryRecord.id, nickname, name, roll, editingHistoryRecord.semesters, true);
+                updateHistoryRecord(editingHistoryRecord.calculationId || editingHistoryRecord.id, nickname, name, roll, editingHistoryRecord.semesters, true);
             }
         });
     }
 };
+
+async function updateHistoryRecord(calcId, nickname, name, roll, semesters, isNew = false) {
+    const uid = state.auth.user ? state.auth.user.uid : null;
+    if (!uid) {
+        showToast("Please login to update history.", "error");
+        return;
+    }
+
+    try {
+        const originalSemesters = state.semesters;
+        state.semesters = semesters;
+        const overall = calculateCombined(['sem1', 'sem2', 'sem3', 'sem4']);
+        state.semesters = originalSemesters;
+
+        const summary = {
+            overallCGPA: overall.cgpa,
+            percentage: overall.percentage,
+            totalCredits: overall.totalCredits,
+            activeBacklogs: overall.backlogs
+        };
+
+        if (state.auth.mode === 'firebase') {
+            const db = getFirebaseDb();
+            if (db && editingHistoryRecord) {
+                const profileId = editingHistoryRecord.profileId || 'legacy_prof';
+                const targetCalcId = isNew ? ('result_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5)) : calcId;
+
+                if (profileId === 'legacy_prof') {
+                    const calcPayload = {
+                        nickname: (nickname || 'Result').trim(),
+                        resultNickname: (nickname || 'Result').trim(),
+                        semesters,
+                        summary,
+                        updatedAt: serverTimestamp()
+                    };
+                    if (isNew) {
+                        await addDoc(collection(db, "users", uid, "history"), { ...calcPayload, createdAt: serverTimestamp() });
+                    } else {
+                        await setDoc(doc(db, "users", uid, "history", targetCalcId), calcPayload, { merge: true });
+                    }
+                } else {
+                    const calcPayload = {
+                        profileId,
+                        ownerUid: uid,
+                        resultNickname: (nickname || 'Result').trim(),
+                        semesters,
+                        summary,
+                        updatedAt: serverTimestamp()
+                    };
+                    await setDoc(doc(db, "users", uid, "resultProfiles", profileId, "calculations", targetCalcId), calcPayload, { merge: true });
+                }
+                showToast(isNew ? `Saved as new result "${nickname}".` : `Updated result "${nickname}".`, "success");
+            }
+        }
+
+        if (dom.historyEditModal) dom.historyEditModal.style.display = 'none';
+        await loadHistoryFromDb();
+    } catch (err) {
+        console.error("Error updating history record:", err);
+        showToast("Failed to update history: " + err.message, "error");
+    }
+}
 
 // Fetch user student profiles and their nested calculations from database
 window.loadHistoryFromDb = async function() {
@@ -5836,7 +5910,7 @@ function openHistoryDetail(record) {
     wrapper.innerHTML = '';
     
     const semesters = record.semesters || {};
-    Object.keys(semesters).forEach(semKey => {
+    ['sem1', 'sem2', 'sem3', 'sem4'].forEach(semKey => {
         const courses = semesters[semKey] || [];
         if (courses.length === 0) return;
         
@@ -5929,7 +6003,7 @@ function renderEditHistoryCourses(semesters) {
     const container = dom.editHistCoursesEditor;
     container.innerHTML = '';
     
-    Object.keys(semesters).forEach(semKey => {
+    ['sem1', 'sem2', 'sem3', 'sem4'].forEach(semKey => {
         const courses = semesters[semKey] || [];
         const semTitle = semKey.toUpperCase().replace('SEM', 'Semester ');
         
@@ -6106,7 +6180,7 @@ function downloadReportPDF(record) {
     // Semester breakdowns
     let yPos = 114;
     
-    Object.keys(semesters).sort().forEach((semKey) => {
+    ['sem1', 'sem2', 'sem3', 'sem4'].filter(semKey => (semesters[semKey] || []).length > 0).forEach((semKey) => {
         const courses = semesters[semKey] || [];
         if (courses.length === 0) return;
         
@@ -6206,7 +6280,7 @@ function downloadReportCSV(record) {
     let csv = 'Semester,Course Code,Subject,Credits,Grade,Grade Point\r\n';
     
     const semesters = record.semesters || {};
-    Object.keys(semesters).forEach(semKey => {
+    ['sem1', 'sem2', 'sem3', 'sem4'].forEach(semKey => {
         const courses = semesters[semKey] || [];
         const semTitle = semKey.toUpperCase().replace('SEM', 'Semester ');
         courses.forEach(c => {
