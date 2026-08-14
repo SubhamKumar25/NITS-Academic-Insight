@@ -4135,6 +4135,49 @@ function setupRealtimeDatabaseSync(uid) {
                     });
                 }
 
+                // Also read from the old flat 'history' collection for backward compatibility
+                // These records were saved before the profile system existed
+                try {
+                    const legacySnap = await getDocs(collection(db, "users", uid, "history"));
+                    if (!legacySnap.empty) {
+                        const legacyCalcs = [];
+                        legacySnap.forEach(lDoc => {
+                            const d = lDoc.data();
+                            legacyCalcs.push({
+                                calculationId: lDoc.id,
+                                profileId: 'legacy_prof',
+                                resultNickname: d.nickname || d.resultNickname || 'Saved Result',
+                                program: d.program || 'mtech',
+                                department: d.department || 'cse',
+                                semesters: d.semesters,
+                                summary: d.summary,
+                                calculationMethod: d.calculationMethod,
+                                createdAt: d.createdAt,
+                                updatedAt: d.updatedAt,
+                                isLegacy: true
+                            });
+                        });
+                        // Sort by updatedAt desc
+                        legacyCalcs.sort((a, b) => {
+                            const tA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+                            const tB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+                            return tB - tA;
+                        });
+                        if (legacyCalcs.length > 0) {
+                            profilesList.push({
+                                profileId: 'legacy_prof',
+                                studentName: 'My Previous Results',
+                                program: 'mtech',
+                                department: 'cse',
+                                calculations: legacyCalcs,
+                                isLegacyGroup: true
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Legacy history read skipped:', e.code || e.message);
+                }
+
                 stateProfileHistory = profilesList;
                 renderHistoryList();
                 if (state.activeTab === 'analysis') {
@@ -5322,6 +5365,47 @@ window.loadHistoryFromDb = async function() {
                         department: profData.department || 'cse',
                         calculations
                     });
+                }
+
+                // Also read from the old flat 'history' collection for backward compatibility
+                try {
+                    const legacySnap = await getDocs(collection(db, "users", uid, "history"));
+                    if (!legacySnap.empty) {
+                        const legacyCalcs = [];
+                        legacySnap.forEach(lDoc => {
+                            const d = lDoc.data();
+                            legacyCalcs.push({
+                                calculationId: lDoc.id,
+                                profileId: 'legacy_prof',
+                                resultNickname: d.nickname || d.resultNickname || 'Saved Result',
+                                program: d.program || 'mtech',
+                                department: d.department || 'cse',
+                                semesters: d.semesters,
+                                summary: d.summary,
+                                calculationMethod: d.calculationMethod,
+                                createdAt: d.createdAt,
+                                updatedAt: d.updatedAt,
+                                isLegacy: true
+                            });
+                        });
+                        legacyCalcs.sort((a, b) => {
+                            const tA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+                            const tB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+                            return tB - tA;
+                        });
+                        if (legacyCalcs.length > 0) {
+                            profilesList.push({
+                                profileId: 'legacy_prof',
+                                studentName: 'My Previous Results',
+                                program: 'mtech',
+                                department: 'cse',
+                                calculations: legacyCalcs,
+                                isLegacyGroup: true
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Legacy history read skipped:', e.code || e.message);
                 }
 
                 stateProfileHistory = profilesList;
