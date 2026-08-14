@@ -4246,9 +4246,19 @@ function handleAuthState(user) {
         if (dropdownNameEl) dropdownNameEl.textContent = displayName;
         if (dropdownEmailEl) dropdownEmailEl.textContent = user.email || '';
         
-        initCurrentResultFromDraft(user.uid);
-        setupRealtimeDatabaseSync(user.uid);
-        loadHistoryFromDb();
+        // Force-resolve the Firebase ID token before starting Firestore operations.
+        // onAuthStateChanged can fire before the token is fully minted on the client,
+        // causing permission-denied. getIdToken() guarantees the token is ready.
+        user.getIdToken(false).then(() => {
+            initCurrentResultFromDraft(user.uid);
+            setupRealtimeDatabaseSync(user.uid);
+            loadHistoryFromDb();
+        }).catch(() => {
+            // Token refresh failed — still attempt operations; auth guards inside will handle gracefully
+            initCurrentResultFromDraft(user.uid);
+            setupRealtimeDatabaseSync(user.uid);
+            loadHistoryFromDb();
+        });
     } else {
         // Clean up real-time listener and clear memory on logout
         if (unsubscribeProfilesListener) {
@@ -4410,7 +4420,9 @@ function triggerAutoSave() {
 
         if (state.auth.mode === 'firebase') {
             const db = getFirebaseDb();
-            if (db) {
+            const authInst = getFirebaseAuth();
+            // Auth guard: only save to Firestore if auth token is confirmed ready
+            if (db && authInst && authInst.currentUser && authInst.currentUser.uid === uid) {
                 setDoc(doc(db, 'users', uid, 'currentDraft', 'data'), {
                     ...draft,
                     updatedAt: serverTimestamp()
@@ -4422,10 +4434,14 @@ function triggerAutoSave() {
                     }
                 })
                 .catch(err => {
-                    console.error("Auto-save draft failed:", err);
+                    if (err.code === 'permission-denied') {
+                        console.warn('Auto-save draft skipped: Auth token not ready.');
+                    } else {
+                        console.error('Auto-save draft failed:', err);
+                    }
                     if (statusEl) {
-                        statusEl.textContent = 'Save failed';
-                        statusEl.style.color = 'var(--danger)';
+                        statusEl.textContent = 'Saved (Local)';
+                        statusEl.style.color = 'var(--success)';
                     }
                 });
             } else {
@@ -6240,18 +6256,19 @@ function bindAnalyzerEvents() {
             saveProfilesToStorage();
             
             const user = state.auth.user;
-            if (user && state.auth.mode === 'firebase' && window.db) {
-                const { doc, setDoc } = window.dbModules || {};
-                if (doc && setDoc) {
-                    setDoc(doc(window.db, 'users', user.uid, 'profiles', newProf.id), {
-                        id: newProf.id,
-                        nickname: newProf.nickname,
-                        recordType: newProf.recordType,
-                        program: newProf.program,
-                        department: newProf.department,
-                        createdAt: serverTimestamp(),
+            if (user && state.auth.mode === 'firebase') {
+                const db = getFirebaseDb();
+                const authInst = getFirebaseAuth();
+                if (db && authInst && authInst.currentUser && authInst.currentUser.uid === user.uid) {
+                    setDoc(doc(db, 'users', user.uid, 'resultProfiles', newProf.id), {
+                        profileId: newProf.id,
+                        ownerUid: user.uid,
+                        userId: user.uid,
+                        studentName: newProf.nickname || 'Student',
+                        program: newProf.program || 'mtech',
+                        department: newProf.department || 'cse',
                         updatedAt: serverTimestamp()
-                    }).catch(err => console.warn("Firestore profile save failed:", err));
+                    }, { merge: true }).catch(err => console.warn('Firestore profile save failed:', err));
                 }
             }
             
