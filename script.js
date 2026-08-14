@@ -4437,6 +4437,15 @@ async function initCurrentResultFromDraft(uid) {
         render();
     }
 
+    // Clear studentName from field after draft load if there is no active calculation being edited
+    // This prevents stale 'Rohit' or old names from auto-filling on fresh login
+    if (!state.currentCalculation.calculationId) {
+        state.currentProfile.studentName = '';
+        state.currentProfile.profileId = null;
+        if (dom.calcStudentName) dom.calcStudentName.value = '';
+        if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = 'No Student Selected';
+    }
+
     // 2. Try Firestore for the authoritative draft
     if (state.auth.mode === 'firebase') {
         const auth = getFirebaseAuth();
@@ -5659,7 +5668,10 @@ function loadCalculationIntoCalculator(prof, calc) {
         if (dom.calcProgramSelect) dom.calcProgramSelect.value = state.currentProfile.program;
         if (dom.calcDepartmentSelect) dom.calcDepartmentSelect.value = state.currentProfile.department;
         if (dom.currentProfileDisplayBadge) dom.currentProfileDisplayBadge.textContent = state.currentProfile.studentName;
-        if (dom.calcLockStructure) dom.calcLockStructure.checked = state.currentCalculation.mode === 'normal';
+        // Always unlock courses when loading a result for editing
+        // so user can freely edit/delete any course row
+        if (dom.calcLockStructure) dom.calcLockStructure.checked = false;
+        state.currentCalculation.mode = 'advanced'; // unlocked
 
         calculateAndRefresh();
         render();
